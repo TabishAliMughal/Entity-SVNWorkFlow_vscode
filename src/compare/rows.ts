@@ -1,0 +1,115 @@
+import type { DiffBlock, Hunk } from '../diff';
+
+/** One visual row of the side-by-side view. A missing index means a filler on that side. */
+export interface Row {
+  /** 0-based line index on each side, or -1 for a filler. */
+  left: number;
+  right: number;
+  /** 'equal' or the hunk type. */
+  kind: 'equal' | 'insert' | 'delete' | 'modify';
+  /** Index into DiffResult.hunks, -1 for equal rows. */
+  hunk: number;
+  /** First row of its hunk (carries the pull arrow). */
+  first: boolean;
+}
+
+/**
+ * Aligns both sides row by row: equal runs pair line to line, an insert has fillers on the left,
+ * a delete fillers on the right, a modify pairs lines top-down and pads the shorter side.
+ */
+export function buildRows(blocks: readonly DiffBlock[]): Row[] {
+  const rows: Row[] = [];
+  let hunkIndex = 0;
+  for (const b of blocks) {
+    if (b.type === 'equal') {
+      const n = b.localEnd - b.localStart;
+      for (let i = 0; i < n; i++) rows.push({ left: b.localStart + i, right: b.incomingStart + i, kind: 'equal', hunk: -1, first: false });
+      continue;
+    }
+    const h = b as Hunk;
+    const ln = h.localEnd - h.localStart;
+    const rn = h.incomingEnd - h.incomingStart;
+    const n = Math.max(ln, rn);
+    for (let i = 0; i < n; i++) {
+      rows.push({
+        left: i < ln ? h.localStart + i : -1,
+        right: i < rn ? h.incomingStart + i : -1,
+        kind: h.type,
+        hunk: hunkIndex,
+        first: i === 0,
+      });
+    }
+    hunkIndex++;
+  }
+  return rows;
+}
+
+/** Row index of the first row of each hunk (for next/prev navigation). */
+export function hunkRowStarts(rows: readonly Row[]): number[] {
+  const out: number[] = [];
+  rows.forEach((r, i) => {
+    if (r.first) out.push(i);
+  });
+  return out;
+}
+
+export interface HunkSpan {
+  hunk: number;
+  /** First row and number of rows of the hunk (both sides share them; the shorter side is padded with fillers). */
+  first: number;
+  count: number;
+  /** Rows actually holding a line on each side (0 = pure insert/delete gap). */
+  leftCount: number;
+  rightCount: number;
+}
+
+export function hunkSpans(rows: readonly Row[]): HunkSpan[] {
+  const out: HunkSpan[] = [];
+  let cur: HunkSpan | undefined;
+  rows.forEach((r, i) => {
+    if (r.hunk < 0) {
+      cur = undefined;
+      return;
+    }
+    if (!cur || cur.hunk !== r.hunk) {
+      cur = { hunk: r.hunk, first: i, count: 0, leftCount: 0, rightCount: 0 };
+      out.push(cur);
+    }
+    cur.count++;
+    if (r.left >= 0) cur.leftCount++;
+    if (r.right >= 0) cur.rightCount++;
+  });
+  return out;
+}
+
+/** Top (px, in content coordinates) of a button of height `btnH` centred on the hunk's rows. */
+export function arrowTop(span: Pick<HunkSpan, 'first' | 'count'>, rowH: number, btnH: number): number {
+  return (span.first + span.count / 2) * rowH - btnH / 2;
+}
+
+/**
+ * Remaps rows after lines `from..to` (inclusive, on `side`) were replaced by `newCount` lines:
+ * later lines shift, surplus lines become fillers, extra new lines get their own rows (no counterpart).
+ */
+export function shiftRows(rows: readonly Row[], side: 'left' | 'right', from: number, to: number, newCount: number): Row[] {
+  const other = side === 'left' ? 'right' : 'left';
+  const oldCount = to - from + 1;
+  const delta = newCount - oldCount;
+  const out: Row[] = [];
+  for (const r of rows) {
+    const idx = r[side];
+    if (idx < from) {
+      out.push(r);
+    } else if (idx <= to) {
+      const keep = idx - from < newCount;
+      if (keep) out.push(r);
+      else if (r[other] >= 0) out.push({ ...r, [side]: -1 });
+      if (idx === to) {
+        for (let j = oldCount; j < newCount; j++) out.push({ left: -1, right: -1, kind: 'equal', hunk: -1, first: false, [side]: from + j });
+      }
+    } else {
+      out.push({ ...r, [side]: idx + delta });
+    }
+  }
+  return out;
+}

@@ -1,0 +1,27 @@
+/* 3-way merge view; builds on media/compare/compare.css (toolbar, rows, highlight.js tokens) */
+.toolbar button.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.toolbar button.primary:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
+.notes { margin: 0; padding: 4px 10px; max-height: 120px; overflow: auto; white-space: pre-wrap; font-size: 12px; background: var(--vscode-textBlockQuote-background); border-bottom: 1px solid var(--vscode-panel-border, #444); }
+.cheads { display: grid; grid-template-columns: 1fr 1fr 1fr; font-family: var(--vscode-font-family, sans-serif); font-size: 12px; border-bottom: 1px solid var(--vscode-panel-border, #444); }
+.cheads .head { min-width: 0; padding: 3px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); }
+.cmain { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.seg { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+.seg .cell { min-width: 0; overflow: hidden; border-right: 1px solid var(--vscode-panel-border, #444); }
+.seg .cell:last-child { border-right: none; }
+.seg.conflict { margin: 6px 0; border-top: 1px solid var(--vscode-editorWarning-foreground, #cca700); border-bottom: 1px solid var(--vscode-editorWarning-foreground, #cca700); }
+.seg.conflict.done { border-color: var(--vscode-editorInfo-foreground, #3794ff); }
+.seg.conflict.cur { outline: 1px solid var(--vscode-focusBorder, #007fd4); outline-offset: -1px; }
+.chead { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 22px; padding: 1px 6px; font-family: var(--vscode-font-family, sans-serif); font-size: 12px; background: var(--vscode-editorWidget-background); }
+.chead .ctitle { flex: 1 1 auto; color: var(--vscode-descriptionForeground); white-space: nowrap; }
+.chead button { font-size: 11px; padding: 0 6px; cursor: pointer; color: var(--vscode-button-secondaryForeground, var(--vscode-foreground)); background: var(--vscode-button-secondaryBackground, transparent); border: 1px solid var(--vscode-button-border, var(--vscode-contrastBorder, #666)); }
+.chead button:hover { background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground)); }
+.chead button.on { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.row.cf-mine, .row.cf-mine .ln, .row.ch-mine, .row.ch-mine .ln { background: var(--vscode-merge-currentContentBackground, rgba(64, 200, 174, 0.2)); }
+.row.cf-theirs, .row.cf-theirs .ln, .row.ch-theirs, .row.ch-theirs .ln { background: var(--vscode-merge-incomingContentBackground, rgba(64, 166, 255, 0.2)); }
+.row.ch-auto, .row.ch-auto .ln { background: var(--vscode-merge-commonContentBackground, rgba(96, 96, 96, 0.2)); }
+.row.cf-done, .row.cf-done .ln { background: var(--vscode-diffEditor-insertedLineBackground, rgba(155, 185, 85, 0.2)); }
+.row.cf-open.filler .tx { color: var(--vscode-editorWarning-foreground, #cca700); font-family: var(--vscode-font-family, sans-serif); font-size: 12px; }
+.row.cf-open.filler { background: var(--vscode-inputValidation-warningBackground, rgba(204, 167, 0, 0.12)); }
+textarea.edit { display: block; box-sizing: border-box; width: 100%; resize: vertical; white-space: pre; overflow: auto; font: inherit; line-height: 20px; tab-size: 4; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-focusBorder, #007fd4); }
+.fold { padding: 2px 10px; text-align: center; cursor: pointer; font-family: var(--vscode-font-family, sans-serif); font-size: 12px; color: var(--vscode-descriptionForeground); background: var(--vscode-editorWidget-background); }
+.fold:hover { color: var(--vscode-foreground); }

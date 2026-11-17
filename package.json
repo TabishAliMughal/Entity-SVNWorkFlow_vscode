@@ -1,0 +1,1977 @@
+{
+  "name": "Entity-SVNWorkflow",
+  "displayName": "Entity-SVNWorkflow",
+  "description": "SVN workflows for VS Code using TortoiseSVN's svn.exe: override update/commit, blame, history and partial pull.",
+  "version": "0.1.0",
+  "publisher": "TabishAliMughal",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "SVN operations are disabled in untrusted workspaces: a working copy can carry svn:externals, hooks-like properties and files that run code or send credentials to other servers.",
+      "restrictedConfigurations": [
+        "svnWorkflow.svnPath",
+        "svnWorkflow.explorerFileOps",
+        "svnWorkflow.shelve.mode",
+        "svnWorkflow.commandLog.verbosity"
+      ]
+    },
+    "virtualWorkspaces": false
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "svnWorkflow.showRepoInfo",
+        "title": "Show Repository Info (svn info)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.selectSvnPath",
+        "title": "Locate svn.exe",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.showOutput",
+        "title": "Show Output",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.setCredentials",
+        "title": "Set Repository Username and Password",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.clearCredentials",
+        "title": "Clear Repository Username and Password",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.refresh",
+        "title": "Refresh Changes (check server)",
+        "category": "SVN",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "svnWorkflow.pane.filterOutgoing",
+        "title": "Show Outgoing Changes",
+        "category": "SVN",
+        "icon": "$(arrow-up)",
+        "toggled": {
+          "condition": "svnWorkflow.paneFilter == outgoing",
+          "icon": "$(arrow-up)"
+        }
+      },
+      {
+        "command": "svnWorkflow.pane.filterIncoming",
+        "title": "Show Incoming Changes",
+        "category": "SVN",
+        "icon": "$(arrow-down)",
+        "toggled": {
+          "condition": "svnWorkflow.paneFilter == incoming",
+          "icon": "$(arrow-down)"
+        }
+      },
+      {
+        "command": "svnWorkflow.pane.filterAll",
+        "title": "Show All Changes (Outgoing + Incoming)",
+        "category": "SVN",
+        "icon": "$(list-flat)",
+        "toggled": {
+          "condition": "svnWorkflow.paneFilter == all",
+          "icon": "$(list-flat)"
+        }
+      },
+      {
+        "command": "svnWorkflow.pane.viewAsTree",
+        "title": "View as Tree",
+        "category": "SVN",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "svnWorkflow.pane.viewAsList",
+        "title": "View as List",
+        "category": "SVN",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "svnWorkflow.pane.openDiff",
+        "title": "Open Diff",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.pane.openFile",
+        "title": "Open File",
+        "category": "SVN",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "svnWorkflow.add",
+        "title": "Add to Version Control",
+        "icon": "$(add)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.ignore",
+        "title": "Add to svn:ignore...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.unignore",
+        "title": "Remove from svn:ignore...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.overrideUpdate",
+        "title": "Override and Update (discard local changes)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.overrideCommit",
+        "title": "Override and Commit (replace server changes with local)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.restoreOverrideBackup",
+        "title": "Restore from Override Backup",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.update",
+        "title": "Update",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.commit",
+        "title": "Commit...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.pane.updateAll",
+        "title": "Update All Repositories",
+        "icon": "$(arrow-circle-down)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.pane.commitAll",
+        "title": "Commit All...",
+        "icon": "$(check-all)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.pane.overrideUpdateRepo",
+        "title": "Override and Update Repository...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.statusBar.menu",
+        "title": "SVN Status Bar Menu",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.compareWithIncoming",
+        "title": "Compare with Incoming (pull changes)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.compareWithRevision",
+        "title": "Compare with Revision...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.blame.toggle",
+        "title": "Toggle Blame Annotations",
+        "category": "SVN",
+        "icon": "$(account)"
+      },
+      {
+        "command": "svnWorkflow.blame.show",
+        "title": "Show Blame",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.blame.refresh",
+        "title": "Refresh Blame",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.history",
+        "title": "Show History",
+        "category": "SVN",
+        "icon": "$(history)"
+      },
+      {
+        "command": "svnWorkflow.historyRepo",
+        "title": "Show Repository History...",
+        "category": "SVN",
+        "icon": "$(history)"
+      },
+      {
+        "command": "svnWorkflow.checkout",
+        "title": "Checkout (new working copy)...",
+        "category": "SVN",
+        "icon": "$(repo-clone)"
+      },
+      {
+        "command": "svnWorkflow.relocate",
+        "title": "Relocate Repository URL...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.revert",
+        "title": "Revert...",
+        "category": "SVN",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "svnWorkflow.cleanup",
+        "title": "Cleanup / Break Locks / Remove Unversioned...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.upgradeWc",
+        "title": "Upgrade Working Copy Format...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.updateToRevision",
+        "title": "Update to Revision...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.switch",
+        "title": "Switch to Branch / Tag / URL...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.setDepth",
+        "title": "Set Depth / Sparse Update...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.delete",
+        "title": "Delete (svn delete)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.rename",
+        "title": "Rename (svn move)...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.move",
+        "title": "Move to Folder (svn move)...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.copy",
+        "title": "Copy (svn copy, keeps history)...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.mkdir",
+        "title": "New Versioned Folder (svn mkdir)...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.recordMoves",
+        "title": "Record Moved / Deleted Files in SVN...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.changelist.add",
+        "title": "Add to Changelist...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.changelist.remove",
+        "title": "Remove from Changelist",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.changelist.create",
+        "title": "Create Changelist...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.changelist.rename",
+        "title": "Rename Changelist...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.changelist.clear",
+        "title": "Clear Changelist",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.changelist.commit",
+        "title": "Commit Changelist...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.changelist.list",
+        "title": "List Changelists",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.lock",
+        "title": "Lock...",
+        "category": "SVN",
+        "icon": "$(lock)"
+      },
+      {
+        "command": "svnWorkflow.unlock",
+        "title": "Unlock",
+        "category": "SVN",
+        "icon": "$(unlock)"
+      },
+      {
+        "command": "svnWorkflow.lock.steal",
+        "title": "Steal Lock...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.lock.break",
+        "title": "Break Lock...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.lock.info",
+        "title": "Show Lock Info",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.lock.list",
+        "title": "List Locks",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.props.edit",
+        "title": "Edit Properties...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.props.toggleNeedsLock",
+        "title": "Toggle svn:needs-lock",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.externals.update",
+        "title": "Update Externals",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.externals.list",
+        "title": "List Externals",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.conflict.resolve",
+        "title": "Resolve Conflict...",
+        "category": "SVN",
+        "icon": "$(merge)"
+      },
+      {
+        "command": "svnWorkflow.conflict.edit",
+        "title": "Resolve Text Conflict (3-Way Merge Editor)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.conflict.props",
+        "title": "Resolve Property Conflict...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.conflict.tree",
+        "title": "Resolve Tree Conflict...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.conflict.mineFull",
+        "title": "Resolve Using Mine (Whole File)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.conflict.theirsFull",
+        "title": "Resolve Using Theirs (Whole File)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.conflict.mineConflict",
+        "title": "Resolve Using Mine (Conflicting Blocks Only)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.conflict.theirsConflict",
+        "title": "Resolve Using Theirs (Conflicting Blocks Only)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.conflict.working",
+        "title": "Mark as Resolved (Working File)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.conflict.base",
+        "title": "Resolve Using Base",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.conflict.accept",
+        "title": "Resolve Conflicts With...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.conflict.acceptAll",
+        "title": "Resolve All Conflicts in a Repository...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.conflict.list",
+        "title": "Show Conflicts",
+        "category": "SVN",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "svnWorkflow.conflict.show",
+        "title": "Show Conflicts in the SVN Pane",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.merge",
+        "title": "Merge...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.mergeSync",
+        "title": "Sync Merge (from trunk / branch)...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.mergeRevisions",
+        "title": "Merge Revisions (Cherry-pick)...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.reintegrate",
+        "title": "Reintegrate Branch...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.mergeInfo",
+        "title": "Merge Info (eligible / merged revisions)...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.createBranch",
+        "title": "Create Branch...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.createTag",
+        "title": "Create Tag...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.listBranches",
+        "title": "Branches and Tags...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.deleteBranch",
+        "title": "Delete Branch or Tag...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.export",
+        "title": "Export...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.cmdlog.show",
+        "title": "Show Command Log",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.cmdlog.copy",
+        "title": "Copy Command from Log (password masked)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.cmdlog.clear",
+        "title": "Clear Command Log",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.auth.list",
+        "title": "List Stored Credentials",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.auth.clearOne",
+        "title": "Clear Stored Credentials of a Repository",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.auth.clearAll",
+        "title": "Clear All Stored Credentials",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.auth.clearSvnCache",
+        "title": "Clear Subversion's Own Auth Cache",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.auth.certs",
+        "title": "Trusted Server Certificates...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.diff.base",
+        "title": "Diff: Working Copy vs BASE",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.diff.head",
+        "title": "Diff: Working Copy vs HEAD",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.diff.revision",
+        "title": "Diff: Working Copy vs Revision...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.diff.revisions",
+        "title": "Diff: Two Revisions...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.diff.urls",
+        "title": "Diff: Between Branches / URLs...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.diff.selectForCompare",
+        "title": "Select for Compare",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.diff.compareWithSelected",
+        "title": "Compare with Selected",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.diff.exportUnified",
+        "title": "Export Unified Diff...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.patch.create",
+        "title": "Create Patch...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.patch.apply",
+        "title": "Apply Patch...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.shelve",
+        "title": "Shelve Changes...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.shelf.list",
+        "title": "Shelves...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.shelf.unshelve",
+        "title": "Unshelve...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.shelf.delete",
+        "title": "Delete Shelf...",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.shelf.preview",
+        "title": "Preview Shelf...",
+        "category": "SVN"
+      }
+    ],
+    "configuration": {
+      "title": "SVN",
+      "order": 50,
+      "properties": {
+        "svnWorkflow.svnPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 1,
+          "title": "svn.exe Path",
+          "markdownDescription": "Full path to `svn.exe` from TortoiseSVN's command line client tools, for example `C:\\Program Files\\TortoiseSVN\\bin\\svn.exe`. Leave empty to auto-detect. Changes apply immediately. [Browse for svn.exe](command:svnWorkflow.selectSvnPath)"
+        },
+        "svnWorkflow.commandTimeoutSeconds": {
+          "type": "number",
+          "default": 120,
+          "minimum": 5,
+          "scope": "machine",
+          "order": 3,
+          "title": "Command Timeout (seconds)",
+          "description": "Timeout for a single svn command."
+        },
+        "svnWorkflow.incomingCheckIntervalSeconds": {
+          "type": "number",
+          "default": 300,
+          "minimum": 0,
+          "scope": "machine",
+          "order": 4,
+          "title": "Incoming Check Interval (seconds)",
+          "markdownDescription": "How often to ask the server which files have incoming changes (`svn status -u`) for every configured repo. `0` disables the periodic check; values from 1 to 29 are treated as 30. Checks also run on startup, after SVN operations and via the refresh button in the SVN view. A repo with an authentication or certificate error is skipped until you refresh manually."
+        },
+        "svnWorkflow.overrideTimeoutSeconds": {
+          "type": "number",
+          "default": 1800,
+          "minimum": 60,
+          "scope": "machine",
+          "order": 6,
+          "title": "Override Command Timeout (seconds)",
+          "description": "Timeout for each svn command (revert, update, commit, restore) inside Override and Commit and Restore from Override Backup. Much longer than the normal timeout so a big update is not killed halfway."
+        },
+        "svnWorkflow.overrideBackupsToKeep": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "scope": "machine",
+          "order": 5,
+          "title": "Override Backups to Keep",
+          "markdownDescription": "Override and Commit saves your local files to the extension's storage before it reverts and updates. After a successful commit the newest N of these backups are kept (`0` deletes the backup immediately). Backups of runs that failed are never deleted automatically; use **SVN: Restore from Override Backup**."
+        },
+        "svnWorkflow.override.backupMaxAgeDays": {
+          "type": "integer",
+          "default": 30,
+          "minimum": 0,
+          "scope": "machine",
+          "order": 7,
+          "title": "Override Backup Age Limit (days)",
+          "markdownDescription": "Override and Commit backups of runs that did not finish are kept until you delete them. At startup you are asked whether to delete those older than this many days (`0` never asks). Backups and shelves contain plain, unencrypted copies of your source files."
+        },
+        "svnWorkflow.diff.ignoreWhitespace": {
+          "type": "string",
+          "enum": [
+            "none",
+            "trailing",
+            "all"
+          ],
+          "default": "none",
+          "description": "Default whitespace handling in the compare view (can be changed per view in its toolbar).",
+          "title": "Compare: Ignore Whitespace"
+        },
+        "svnWorkflow.diff.ignoreCase": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ignore letter case by default in the compare view.",
+          "title": "Compare: Ignore Case"
+        },
+        "svnWorkflow.diff.ignoreEol": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ignore line ending differences by default in the compare view.",
+          "title": "Compare: Ignore Line Endings"
+        },
+        "svnWorkflow.blame.format": {
+          "type": "string",
+          "default": "{author} r{rev} {date}",
+          "order": 10,
+          "title": "Blame Annotation Format",
+          "markdownDescription": "Text shown in the gutter for each line. Tokens: `{author}`, `{rev}`, `{date}` (YYYY-MM-DD), `{message}` (first line, hover only). Lines changed locally show `uncommitted`."
+        },
+        "svnWorkflow.blame.ignoreWhitespace": {
+          "type": "boolean",
+          "default": false,
+          "order": 11,
+          "title": "Blame Ignores Whitespace",
+          "markdownDescription": "Pass `-x -w` to `svn blame` so whitespace-only changes do not take over a line."
+        },
+        "svnWorkflow.explorerFileOps": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "auto",
+            "off"
+          ],
+          "default": "ask",
+          "scope": "machine",
+          "enumDescriptions": [
+            "Offer to record renames/deletes made in the VS Code Explorer as svn move / delete",
+            "Record them automatically",
+            "Do nothing"
+          ],
+          "markdownDescription": "When a versioned file or folder is renamed or deleted in the VS Code Explorer (it becomes missing `!` plus an unversioned file), offer to record it as `svn move` / `svn delete` so history is kept. Use **Record Moved / Deleted Files** for changes made elsewhere.",
+          "title": "Explorer Renames and Deletes"
+        },
+        "svnWorkflow.commit.historySize": {
+          "type": "number",
+          "default": 20,
+          "minimum": 0,
+          "maximum": 200,
+          "scope": "machine",
+          "title": "Commit Message History Size",
+          "description": "How many recent commit messages the commit dialog remembers (0 disables the history)."
+        },
+        "svnWorkflow.locks.promptNeedsLock": {
+          "type": "boolean",
+          "default": true,
+          "scope": "machine",
+          "title": "Prompt to Lock svn:needs-lock Files",
+          "description": "When a read-only file with the svn:needs-lock property is opened, offer \"Lock to Edit\"."
+        },
+        "svnWorkflow.layout.base": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "markdownDescription": "Project base below the repository root that holds `trunk`, `branches` and `tags` (for example `projects/app`). Empty: detected from the working copy URL, falling back to the repository root. Used by Merge, Create Branch/Tag, Delete and the branch pickers.",
+          "title": "Layout: Project Base"
+        },
+        "svnWorkflow.layout.trunk": {
+          "type": "string",
+          "default": "trunk",
+          "scope": "window",
+          "markdownDescription": "Path of the trunk below the project base.",
+          "title": "Layout: Trunk Folder"
+        },
+        "svnWorkflow.layout.branches": {
+          "type": "string",
+          "default": "branches",
+          "scope": "window",
+          "markdownDescription": "Folder that holds branches, below the project base.",
+          "title": "Layout: Branches Folder"
+        },
+        "svnWorkflow.layout.tags": {
+          "type": "string",
+          "default": "tags",
+          "scope": "window",
+          "markdownDescription": "Folder that holds tags, below the project base.",
+          "title": "Layout: Tags Folder"
+        },
+        "svnWorkflow.commandLog.verbosity": {
+          "type": "string",
+          "enum": [
+            "off",
+            "commands",
+            "commandsAndOutput"
+          ],
+          "enumDescriptions": [
+            "Do not log commands",
+            "Log every svn command with repo, cwd, exit code and duration",
+            "Also log stderr and the start of stdout"
+          ],
+          "default": "commands",
+          "scope": "machine",
+          "markdownDescription": "What the **SVN Commands** Output channel records. Passwords are always masked. [Show Command Log](command:svnWorkflow.cmdlog.show)",
+          "title": "Command Log Verbosity"
+        },
+        "svnWorkflow.diff.contextLines": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50,
+          "default": 3,
+          "description": "Context lines around each change in exported unified diffs and patches (svn diff uses 3).",
+          "title": "Diff Context Lines"
+        },
+        "svnWorkflow.shelve.mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "native",
+            "patch"
+          ],
+          "default": "auto",
+          "scope": "machine",
+          "description": "Shelving backend. auto: svn 1.14's experimental x-shelve when it works, otherwise the extension's patch shelves; native: only svn x-shelve (experimental); patch: always the extension's patch-based shelves (stored in the extension storage).",
+          "enumDescriptions": [
+            "Use native svn shelving when available, fall back to patch shelves.",
+            "Only svn x-shelve / x-unshelve (experimental, svn 1.10+ with SVN_EXPERIMENTAL_COMMANDS).",
+            "Patch files plus metadata in the extension storage; works with every svn version."
+          ],
+          "title": "Shelving Backend"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "svnWorkflow",
+          "title": "SVN",
+          "icon": "media/svn.svg"
+        }
+      ]
+    },
+    "views": {
+      "svnWorkflow": [
+        {
+          "id": "svnWorkflow.pane",
+          "name": "Changes",
+          "icon": "media/svn.svg"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "svnWorkflow.pane",
+        "contents": "The opened folder is not inside an SVN working copy.\n[Checkout...](command:svnWorkflow.checkout)\n[Locate svn.exe...](command:svnWorkflow.selectSvnPath)\n[Open Folder](command:vscode.openFolder)",
+        "when": "!svnWorkflow.hasScopedRepo"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "svnWorkflow.pane.openDiff",
+          "when": "false"
+        },
+        {
+          "command": "svnWorkflow.pane.openFile",
+          "when": "false"
+        },
+        {
+          "command": "svnWorkflow.statusBar.menu",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "svnWorkflow.pane.viewAsList",
+          "when": "view == svnWorkflow.pane && svnWorkflow.paneViewMode != list",
+          "group": "navigation@6"
+        },
+        {
+          "command": "svnWorkflow.pane.viewAsTree",
+          "when": "view == svnWorkflow.pane && svnWorkflow.paneViewMode == list",
+          "group": "navigation@6"
+        },
+        {
+          "command": "svnWorkflow.refresh",
+          "when": "view == svnWorkflow.pane",
+          "group": "navigation@1"
+        },
+        {
+          "command": "svnWorkflow.pane.updateAll",
+          "when": "view == svnWorkflow.pane",
+          "group": "navigation@2"
+        },
+        {
+          "command": "svnWorkflow.pane.commitAll",
+          "when": "view == svnWorkflow.pane",
+          "group": "navigation@3"
+        },
+        {
+          "command": "svnWorkflow.conflict.list",
+          "when": "view == svnWorkflow.pane && svnWorkflow.hasConflicts",
+          "group": "navigation@4"
+        },
+        {
+          "command": "svnWorkflow.pane.filterOutgoing",
+          "when": "view == svnWorkflow.pane",
+          "group": "0_filter@1"
+        },
+        {
+          "command": "svnWorkflow.pane.filterIncoming",
+          "when": "view == svnWorkflow.pane",
+          "group": "0_filter@2"
+        },
+        {
+          "command": "svnWorkflow.pane.filterAll",
+          "when": "view == svnWorkflow.pane",
+          "group": "0_filter@3"
+        },
+        {
+          "command": "svnWorkflow.pane.overrideUpdateRepo",
+          "when": "view == svnWorkflow.pane && svnWorkflow.hasIncoming",
+          "group": "1_override@1"
+        },
+        {
+          "command": "svnWorkflow.conflict.acceptAll",
+          "when": "view == svnWorkflow.pane && svnWorkflow.hasConflicts",
+          "group": "2_conflicts@1"
+        },
+        {
+          "command": "svnWorkflow.historyRepo",
+          "when": "view == svnWorkflow.pane",
+          "group": "3_history@1"
+        },
+        {
+          "submenu": "svnWorkflow.pane.title.wcSubmenu",
+          "when": "view == svnWorkflow.pane",
+          "group": "5_more@1"
+        },
+        {
+          "submenu": "svnWorkflow.pane.title.listsSubmenu",
+          "when": "view == svnWorkflow.pane",
+          "group": "5_more@2"
+        },
+        {
+          "submenu": "svnWorkflow.pane.title.mergeSubmenu",
+          "when": "view == svnWorkflow.pane",
+          "group": "5_more@3"
+        },
+        {
+          "submenu": "svnWorkflow.pane.title.patchSubmenu",
+          "when": "view == svnWorkflow.pane",
+          "group": "5_more@4"
+        },
+        {
+          "submenu": "svnWorkflow.pane.title.diagSubmenu",
+          "when": "view == svnWorkflow.pane",
+          "group": "5_more@5"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "svnWorkflow.pane.openFile",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bfile\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "svnWorkflow.pane.openDiff",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "svnWorkflow.overrideUpdate",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bincoming\\b/",
+          "group": "2_modify@1"
+        },
+        {
+          "command": "svnWorkflow.overrideCommit",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bincoming\\b/",
+          "group": "2_modify@2"
+        },
+        {
+          "command": "svnWorkflow.update",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "group": "2_modify@3"
+        },
+        {
+          "command": "svnWorkflow.commit",
+          "when": "view == svnWorkflow.pane && viewItem =~ /^(?!.*\\bunversioned\\b).*\\boutgoing\\b/",
+          "group": "2_modify@4"
+        },
+        {
+          "command": "svnWorkflow.add",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bunversioned\\b/",
+          "group": "2_modify@5"
+        },
+        {
+          "command": "svnWorkflow.add",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bunversioned\\b/",
+          "group": "inline@2"
+        },
+        {
+          "command": "svnWorkflow.compareWithIncoming",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bincoming\\b/ && viewItem =~ /\\bfile\\b/",
+          "group": "3_compare@1"
+        },
+        {
+          "command": "svnWorkflow.history",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "group": "3_history@1"
+        },
+        {
+          "command": "svnWorkflow.blame.show",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bfile\\b/ && viewItem =~ /^(?!.*\\b(unversioned|added)\\b)/",
+          "group": "3_history@2"
+        },
+        {
+          "command": "svnWorkflow.revert",
+          "when": "view == svnWorkflow.pane && viewItem =~ /^(?!.*\\bunversioned\\b).*\\b(outgoing|svnRepo)\\b/",
+          "group": "2_modify@7"
+        },
+        {
+          "command": "svnWorkflow.changelist.commit",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bnamedChangelist\\b/",
+          "group": "2_modify@1"
+        },
+        {
+          "command": "svnWorkflow.changelist.rename",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bnamedChangelist\\b/",
+          "group": "2_modify@2"
+        },
+        {
+          "command": "svnWorkflow.changelist.clear",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bnamedChangelist\\b/",
+          "group": "2_modify@3"
+        },
+        {
+          "command": "svnWorkflow.commit",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bdefaultGroup\\b/",
+          "group": "2_modify@1"
+        },
+        {
+          "command": "svnWorkflow.conflict.resolve",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bconflicted\\b/",
+          "group": "inline@0"
+        },
+        {
+          "command": "svnWorkflow.conflict.resolve",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bconflicted\\b/",
+          "group": "0_conflict@1"
+        },
+        {
+          "command": "svnWorkflow.conflict.edit",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bconflictText\\b/",
+          "group": "0_conflict@2"
+        },
+        {
+          "command": "svnWorkflow.conflict.props",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bconflictProp\\b/",
+          "group": "0_conflict@3"
+        },
+        {
+          "command": "svnWorkflow.conflict.tree",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bconflictTree\\b/",
+          "group": "0_conflict@4"
+        },
+        {
+          "submenu": "svnWorkflow.conflictSubmenu",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bconflicted\\b/",
+          "group": "0_conflict@5"
+        },
+        {
+          "command": "svnWorkflow.conflict.acceptAll",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/ && viewItem =~ /\\bconflicted\\b/",
+          "group": "0_conflict@6"
+        },
+        {
+          "command": "svnWorkflow.conflict.acceptAll",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnConflicts\\b/",
+          "group": "0_conflict@1"
+        },
+        {
+          "submenu": "svnWorkflow.pane.wcSubmenu",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "group": "7_more@1"
+        },
+        {
+          "submenu": "svnWorkflow.pane.locksSubmenu",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/",
+          "group": "7_more@2"
+        },
+        {
+          "submenu": "svnWorkflow.pane.diffSubmenu",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnChangelist)\\b/",
+          "group": "7_more@3"
+        },
+        {
+          "submenu": "svnWorkflow.pane.mergeSubmenu",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "group": "7_more@4"
+        }
+      ],
+      "explorer/context": [
+        {
+          "submenu": "svnWorkflow.submenu",
+          "when": "svnWorkflow.hasRepos",
+          "group": "7_svn"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "svnWorkflow.submenu",
+          "when": "svnWorkflow.hasRepos && resourceScheme == file",
+          "group": "7_svn"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "submenu": "svnWorkflow.submenu",
+          "when": "svnWorkflow.hasRepos && resourceScheme == file",
+          "group": "7_svn"
+        }
+      ],
+      "svnWorkflow.submenu": [
+        {
+          "command": "svnWorkflow.conflict.resolve",
+          "when": "resourcePath in svnWorkflow.conflictedPaths",
+          "group": "0_conflict@1"
+        },
+        {
+          "submenu": "svnWorkflow.conflictSubmenu",
+          "when": "resourcePath in svnWorkflow.conflictedPaths",
+          "group": "0_conflict@2"
+        },
+        {
+          "command": "svnWorkflow.overrideUpdate",
+          "when": "resourcePath in svnWorkflow.incomingPaths",
+          "group": "1_override@1"
+        },
+        {
+          "command": "svnWorkflow.overrideCommit",
+          "when": "resourcePath in svnWorkflow.incomingPaths",
+          "group": "1_override@2"
+        },
+        {
+          "command": "svnWorkflow.compareWithIncoming",
+          "when": "resourcePath in svnWorkflow.incomingPaths && !explorerResourceIsFolder",
+          "group": "1_override@3"
+        },
+        {
+          "command": "svnWorkflow.update",
+          "when": "svnWorkflow.hasRepos",
+          "group": "2_sync@1"
+        },
+        {
+          "command": "svnWorkflow.commit",
+          "when": "resourcePath in svnWorkflow.outgoingPaths",
+          "group": "2_sync@2"
+        },
+        {
+          "command": "svnWorkflow.add",
+          "when": "resourcePath in svnWorkflow.unversionedPaths",
+          "group": "3_modify@1"
+        },
+        {
+          "command": "svnWorkflow.revert",
+          "when": "resourcePath in svnWorkflow.outgoingPaths && resourcePath not in svnWorkflow.unversionedPaths",
+          "group": "3_modify@4"
+        },
+        {
+          "command": "svnWorkflow.history",
+          "when": "svnWorkflow.hasRepos",
+          "group": "4_history@1"
+        },
+        {
+          "command": "svnWorkflow.blame.show",
+          "when": "svnWorkflow.hasRepos && !svnWorkflow.blameOn",
+          "group": "4_history@2"
+        },
+        {
+          "command": "svnWorkflow.blame.toggle",
+          "when": "svnWorkflow.hasRepos",
+          "group": "4_history@3"
+        },
+        {
+          "submenu": "svnWorkflow.wcSubmenu",
+          "when": "svnWorkflow.hasRepos",
+          "group": "5_more@1"
+        },
+        {
+          "submenu": "svnWorkflow.locksSubmenu",
+          "when": "svnWorkflow.hasRepos",
+          "group": "5_more@2"
+        },
+        {
+          "submenu": "svnWorkflow.diffSubmenu",
+          "when": "svnWorkflow.hasRepos",
+          "group": "5_more@3"
+        },
+        {
+          "submenu": "svnWorkflow.mergeSubmenu",
+          "when": "svnWorkflow.hasRepos",
+          "group": "5_more@4"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "svnWorkflow.compareWithIncoming",
+          "when": "resourcePath in svnWorkflow.incomingPaths && resourceScheme == file",
+          "group": "1_svn@1"
+        },
+        {
+          "command": "svnWorkflow.overrideUpdate",
+          "when": "resourcePath in svnWorkflow.incomingPaths && resourceScheme == file",
+          "group": "1_svn@2"
+        },
+        {
+          "command": "svnWorkflow.overrideCommit",
+          "when": "resourcePath in svnWorkflow.incomingPaths && resourceScheme == file",
+          "group": "1_svn@3"
+        },
+        {
+          "command": "svnWorkflow.commit",
+          "when": "resourcePath in svnWorkflow.outgoingPaths && resourceScheme == file",
+          "group": "1_svn@4"
+        },
+        {
+          "command": "svnWorkflow.add",
+          "when": "resourcePath in svnWorkflow.unversionedPaths && resourceScheme == file",
+          "group": "1_svn@5"
+        },
+        {
+          "command": "svnWorkflow.revert",
+          "when": "resourcePath in svnWorkflow.outgoingPaths && resourceScheme == file && resourcePath not in svnWorkflow.unversionedPaths",
+          "group": "1_svn@6"
+        },
+        {
+          "command": "svnWorkflow.history",
+          "when": "svnWorkflow.hasRepos && resourceScheme == file",
+          "group": "1_svn@7"
+        },
+        {
+          "command": "svnWorkflow.blame.toggle",
+          "when": "svnWorkflow.hasRepos && resourceScheme == file",
+          "group": "1_svn@8"
+        },
+        {
+          "command": "svnWorkflow.conflict.resolve",
+          "when": "resourcePath in svnWorkflow.conflictedPaths && resourceScheme == file",
+          "group": "1_svn@9"
+        },
+        {
+          "command": "svnWorkflow.lock",
+          "when": "svnWorkflow.hasRepos && resourceScheme == file",
+          "group": "1_svn@10"
+        },
+        {
+          "command": "svnWorkflow.unlock",
+          "when": "svnWorkflow.hasRepos && resourceScheme == file",
+          "group": "1_svn@11"
+        },
+        {
+          "command": "svnWorkflow.props.edit",
+          "when": "svnWorkflow.hasRepos && resourceScheme == file",
+          "group": "1_svn@12"
+        },
+        {
+          "command": "svnWorkflow.changelist.add",
+          "when": "svnWorkflow.hasRepos && resourceScheme == file",
+          "group": "1_svn@13"
+        }
+      ],
+      "svnWorkflow.conflictSubmenu": [
+        {
+          "command": "svnWorkflow.conflict.mineFull",
+          "group": "1_resolve@1"
+        },
+        {
+          "command": "svnWorkflow.conflict.theirsFull",
+          "group": "1_resolve@2"
+        },
+        {
+          "command": "svnWorkflow.conflict.mineConflict",
+          "group": "1_resolve@3"
+        },
+        {
+          "command": "svnWorkflow.conflict.theirsConflict",
+          "group": "1_resolve@4"
+        },
+        {
+          "command": "svnWorkflow.conflict.working",
+          "group": "1_resolve@5"
+        },
+        {
+          "command": "svnWorkflow.conflict.base",
+          "group": "1_resolve@6"
+        }
+      ],
+      "svnWorkflow.wcSubmenu": [
+        {
+          "command": "svnWorkflow.restoreOverrideBackup",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@1"
+        },
+        {
+          "command": "svnWorkflow.updateToRevision",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@2"
+        },
+        {
+          "command": "svnWorkflow.switch",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@3"
+        },
+        {
+          "command": "svnWorkflow.setDepth",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@4"
+        },
+        {
+          "command": "svnWorkflow.cleanup",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@5"
+        },
+        {
+          "command": "svnWorkflow.relocate",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@6"
+        },
+        {
+          "command": "svnWorkflow.upgradeWc",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@7"
+        },
+        {
+          "command": "svnWorkflow.recordMoves",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@8"
+        },
+        {
+          "command": "svnWorkflow.rename",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@9"
+        },
+        {
+          "command": "svnWorkflow.move",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@10"
+        },
+        {
+          "command": "svnWorkflow.copy",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@11"
+        },
+        {
+          "command": "svnWorkflow.delete",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@12"
+        },
+        {
+          "command": "svnWorkflow.mkdir",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_wc@13"
+        }
+      ],
+      "svnWorkflow.locksSubmenu": [
+        {
+          "command": "svnWorkflow.ignore",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_locks@1"
+        },
+        {
+          "command": "svnWorkflow.unignore",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_locks@2"
+        },
+        {
+          "command": "svnWorkflow.changelist.add",
+          "when": "svnWorkflow.hasRepos && !explorerResourceIsFolder",
+          "group": "1_locks@3"
+        },
+        {
+          "command": "svnWorkflow.changelist.remove",
+          "when": "svnWorkflow.hasRepos && !explorerResourceIsFolder",
+          "group": "1_locks@4"
+        },
+        {
+          "command": "svnWorkflow.changelist.commit",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_locks@5"
+        },
+        {
+          "command": "svnWorkflow.lock",
+          "when": "svnWorkflow.hasRepos && !explorerResourceIsFolder",
+          "group": "1_locks@6"
+        },
+        {
+          "command": "svnWorkflow.unlock",
+          "when": "svnWorkflow.hasRepos && !explorerResourceIsFolder",
+          "group": "1_locks@7"
+        },
+        {
+          "command": "svnWorkflow.lock.steal",
+          "when": "svnWorkflow.hasRepos && !explorerResourceIsFolder",
+          "group": "1_locks@8"
+        },
+        {
+          "command": "svnWorkflow.lock.break",
+          "when": "svnWorkflow.hasRepos && !explorerResourceIsFolder",
+          "group": "1_locks@9"
+        },
+        {
+          "command": "svnWorkflow.lock.info",
+          "when": "svnWorkflow.hasRepos && !explorerResourceIsFolder",
+          "group": "1_locks@10"
+        },
+        {
+          "command": "svnWorkflow.props.edit",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_locks@11"
+        },
+        {
+          "command": "svnWorkflow.props.toggleNeedsLock",
+          "when": "svnWorkflow.hasRepos && !explorerResourceIsFolder",
+          "group": "1_locks@12"
+        },
+        {
+          "command": "svnWorkflow.externals.update",
+          "when": "svnWorkflow.hasRepos && explorerResourceIsFolder",
+          "group": "1_locks@13"
+        }
+      ],
+      "svnWorkflow.diffSubmenu": [
+        {
+          "command": "svnWorkflow.compareWithRevision",
+          "when": "svnWorkflow.hasRepos && !explorerResourceIsFolder",
+          "group": "1_diff@1"
+        },
+        {
+          "command": "svnWorkflow.diff.base",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_diff@2"
+        },
+        {
+          "command": "svnWorkflow.diff.head",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_diff@3"
+        },
+        {
+          "command": "svnWorkflow.diff.revision",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_diff@4"
+        },
+        {
+          "command": "svnWorkflow.diff.revisions",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_diff@5"
+        },
+        {
+          "command": "svnWorkflow.diff.urls",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_diff@6"
+        },
+        {
+          "command": "svnWorkflow.diff.selectForCompare",
+          "when": "svnWorkflow.hasRepos && !explorerResourceIsFolder",
+          "group": "1_diff@7"
+        },
+        {
+          "command": "svnWorkflow.diff.compareWithSelected",
+          "when": "svnWorkflow.hasRepos && !explorerResourceIsFolder && svnWorkflow.hasCompareSelection",
+          "group": "1_diff@8"
+        },
+        {
+          "command": "svnWorkflow.diff.exportUnified",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_diff@9"
+        },
+        {
+          "command": "svnWorkflow.patch.create",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_diff@10"
+        },
+        {
+          "command": "svnWorkflow.patch.apply",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_diff@11"
+        },
+        {
+          "command": "svnWorkflow.shelve",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_diff@12"
+        },
+        {
+          "command": "svnWorkflow.shelf.list",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_diff@13"
+        }
+      ],
+      "svnWorkflow.mergeSubmenu": [
+        {
+          "command": "svnWorkflow.merge",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_merge@1"
+        },
+        {
+          "command": "svnWorkflow.mergeSync",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_merge@2"
+        },
+        {
+          "command": "svnWorkflow.mergeRevisions",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_merge@3"
+        },
+        {
+          "command": "svnWorkflow.reintegrate",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_merge@4"
+        },
+        {
+          "command": "svnWorkflow.mergeInfo",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_merge@5"
+        },
+        {
+          "command": "svnWorkflow.createBranch",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_merge@6"
+        },
+        {
+          "command": "svnWorkflow.createTag",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_merge@7"
+        },
+        {
+          "command": "svnWorkflow.listBranches",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_merge@8"
+        },
+        {
+          "command": "svnWorkflow.deleteBranch",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_merge@9"
+        },
+        {
+          "command": "svnWorkflow.export",
+          "when": "svnWorkflow.hasRepos",
+          "group": "1_merge@10"
+        }
+      ],
+      "svnWorkflow.pane.wcSubmenu": [
+        {
+          "command": "svnWorkflow.updateToRevision",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "group": "1_wc@1"
+        },
+        {
+          "command": "svnWorkflow.switch",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_wc@2"
+        },
+        {
+          "command": "svnWorkflow.setDepth",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/ && viewItem =~ /\\bdir\\b|\\bsvnRepo\\b/",
+          "group": "1_wc@3"
+        },
+        {
+          "command": "svnWorkflow.cleanup",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_wc@4"
+        },
+        {
+          "command": "svnWorkflow.relocate",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_wc@5"
+        },
+        {
+          "command": "svnWorkflow.upgradeWc",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_wc@6"
+        },
+        {
+          "command": "svnWorkflow.recordMoves",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "group": "1_wc@7"
+        },
+        {
+          "command": "svnWorkflow.delete",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/",
+          "group": "1_wc@8"
+        },
+        {
+          "command": "svnWorkflow.rename",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/",
+          "group": "1_wc@9"
+        },
+        {
+          "command": "svnWorkflow.move",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/",
+          "group": "1_wc@10"
+        },
+        {
+          "command": "svnWorkflow.copy",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/",
+          "group": "1_wc@11"
+        }
+      ],
+      "svnWorkflow.pane.locksSubmenu": [
+        {
+          "command": "svnWorkflow.ignore",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/",
+          "group": "1_locks@1"
+        },
+        {
+          "command": "svnWorkflow.changelist.add",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bfile\\b/ && viewItem =~ /^(?!.*\\bunversioned\\b)/",
+          "group": "1_locks@2"
+        },
+        {
+          "command": "svnWorkflow.changelist.remove",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bfile\\b/ && viewItem =~ /\\binChangelist\\b/",
+          "group": "1_locks@3"
+        },
+        {
+          "command": "svnWorkflow.lock",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bfile\\b/ && viewItem =~ /^(?!.*\\bunversioned\\b)/",
+          "group": "1_locks@4"
+        },
+        {
+          "command": "svnWorkflow.unlock",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bfile\\b/ && viewItem =~ /^(?!.*\\bunversioned\\b)/",
+          "group": "1_locks@5"
+        },
+        {
+          "command": "svnWorkflow.lock.steal",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bfile\\b/ && viewItem =~ /^(?!.*\\bunversioned\\b)/",
+          "group": "1_locks@6"
+        },
+        {
+          "command": "svnWorkflow.lock.break",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bfile\\b/ && viewItem =~ /^(?!.*\\bunversioned\\b)/",
+          "group": "1_locks@7"
+        },
+        {
+          "command": "svnWorkflow.lock.info",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bfile\\b/ && viewItem =~ /^(?!.*\\bunversioned\\b)/",
+          "group": "1_locks@8"
+        },
+        {
+          "command": "svnWorkflow.props.edit",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /^(?!.*\\bunversioned\\b)/",
+          "group": "1_locks@9"
+        },
+        {
+          "command": "svnWorkflow.props.toggleNeedsLock",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bfile\\b/ && viewItem =~ /^(?!.*\\bunversioned\\b)/",
+          "group": "1_locks@10"
+        },
+        {
+          "command": "svnWorkflow.externals.update",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bdir\\b/",
+          "group": "1_locks@11"
+        }
+      ],
+      "svnWorkflow.pane.diffSubmenu": [
+        {
+          "command": "svnWorkflow.compareWithRevision",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnItem\\b/ && viewItem =~ /\\bfile\\b/",
+          "group": "1_diff@1"
+        },
+        {
+          "command": "svnWorkflow.diff.base",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "group": "1_diff@2"
+        },
+        {
+          "command": "svnWorkflow.diff.head",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "group": "1_diff@3"
+        },
+        {
+          "command": "svnWorkflow.diff.revision",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "group": "1_diff@4"
+        },
+        {
+          "command": "svnWorkflow.diff.revisions",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "group": "1_diff@5"
+        },
+        {
+          "command": "svnWorkflow.diff.urls",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "group": "1_diff@6"
+        },
+        {
+          "command": "svnWorkflow.diff.exportUnified",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnChangelist)\\b/",
+          "group": "1_diff@7"
+        },
+        {
+          "command": "svnWorkflow.patch.create",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnChangelist)\\b/",
+          "group": "1_diff@8"
+        },
+        {
+          "command": "svnWorkflow.patch.apply",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnRepo)\\b/",
+          "group": "1_diff@9"
+        },
+        {
+          "command": "svnWorkflow.shelve",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnChangelist)\\b/",
+          "group": "1_diff@10"
+        },
+        {
+          "command": "svnWorkflow.shelf.list",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnRepo)\\b/",
+          "group": "1_diff@11"
+        }
+      ],
+      "svnWorkflow.pane.mergeSubmenu": [
+        {
+          "command": "svnWorkflow.merge",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_merge@1"
+        },
+        {
+          "command": "svnWorkflow.mergeSync",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_merge@2"
+        },
+        {
+          "command": "svnWorkflow.mergeRevisions",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_merge@3"
+        },
+        {
+          "command": "svnWorkflow.reintegrate",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_merge@4"
+        },
+        {
+          "command": "svnWorkflow.mergeInfo",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_merge@5"
+        },
+        {
+          "command": "svnWorkflow.createBranch",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_merge@6"
+        },
+        {
+          "command": "svnWorkflow.createTag",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_merge@7"
+        },
+        {
+          "command": "svnWorkflow.listBranches",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_merge@8"
+        },
+        {
+          "command": "svnWorkflow.deleteBranch",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnRepo\\b/",
+          "group": "1_merge@9"
+        },
+        {
+          "command": "svnWorkflow.export",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "group": "1_merge@10"
+        }
+      ],
+      "svnWorkflow.pane.title.wcSubmenu": [
+        {
+          "command": "svnWorkflow.checkout",
+          "group": "1_wc@1"
+        },
+        {
+          "command": "svnWorkflow.relocate",
+          "group": "1_wc@2"
+        },
+        {
+          "command": "svnWorkflow.cleanup",
+          "group": "1_wc@3"
+        },
+        {
+          "command": "svnWorkflow.upgradeWc",
+          "group": "1_wc@4"
+        },
+        {
+          "command": "svnWorkflow.recordMoves",
+          "group": "1_wc@5"
+        },
+        {
+          "command": "svnWorkflow.restoreOverrideBackup",
+          "group": "1_wc@6"
+        }
+      ],
+      "svnWorkflow.pane.title.listsSubmenu": [
+        {
+          "command": "svnWorkflow.changelist.create",
+          "group": "1_lists@1"
+        },
+        {
+          "command": "svnWorkflow.changelist.list",
+          "group": "1_lists@2"
+        },
+        {
+          "command": "svnWorkflow.lock.list",
+          "group": "1_lists@3"
+        },
+        {
+          "command": "svnWorkflow.externals.list",
+          "group": "1_lists@4"
+        }
+      ],
+      "svnWorkflow.pane.title.mergeSubmenu": [
+        {
+          "command": "svnWorkflow.merge",
+          "group": "1_merge@1"
+        },
+        {
+          "command": "svnWorkflow.mergeSync",
+          "group": "1_merge@2"
+        },
+        {
+          "command": "svnWorkflow.mergeRevisions",
+          "group": "1_merge@3"
+        },
+        {
+          "command": "svnWorkflow.reintegrate",
+          "group": "1_merge@4"
+        },
+        {
+          "command": "svnWorkflow.mergeInfo",
+          "group": "1_merge@5"
+        },
+        {
+          "command": "svnWorkflow.createBranch",
+          "group": "1_merge@6"
+        },
+        {
+          "command": "svnWorkflow.createTag",
+          "group": "1_merge@7"
+        },
+        {
+          "command": "svnWorkflow.listBranches",
+          "group": "1_merge@8"
+        },
+        {
+          "command": "svnWorkflow.deleteBranch",
+          "group": "1_merge@9"
+        },
+        {
+          "command": "svnWorkflow.export",
+          "group": "1_merge@10"
+        }
+      ],
+      "svnWorkflow.pane.title.patchSubmenu": [
+        {
+          "command": "svnWorkflow.patch.create",
+          "group": "1_patch@1"
+        },
+        {
+          "command": "svnWorkflow.patch.apply",
+          "group": "1_patch@2"
+        },
+        {
+          "command": "svnWorkflow.diff.exportUnified",
+          "group": "1_patch@3"
+        },
+        {
+          "command": "svnWorkflow.shelve",
+          "group": "1_patch@4"
+        },
+        {
+          "command": "svnWorkflow.shelf.list",
+          "group": "1_patch@5"
+        }
+      ],
+      "svnWorkflow.pane.title.diagSubmenu": [
+        {
+          "command": "svnWorkflow.cmdlog.show",
+          "group": "1_diag@1"
+        },
+        {
+          "command": "svnWorkflow.cmdlog.copy",
+          "group": "1_diag@2"
+        },
+        {
+          "command": "svnWorkflow.auth.list",
+          "group": "1_diag@3"
+        },
+        {
+          "command": "svnWorkflow.auth.clearSvnCache",
+          "group": "1_diag@4"
+        }
+      ]
+    },
+    "submenus": [
+      {
+        "id": "svnWorkflow.submenu",
+        "label": "SVN"
+      },
+      {
+        "id": "svnWorkflow.conflictSubmenu",
+        "label": "Resolve Conflict Using"
+      },
+      {
+        "id": "svnWorkflow.wcSubmenu",
+        "label": "Working Copy & Files"
+      },
+      {
+        "id": "svnWorkflow.locksSubmenu",
+        "label": "Changelists, Locks & Properties"
+      },
+      {
+        "id": "svnWorkflow.diffSubmenu",
+        "label": "Diff, Patch & Shelve"
+      },
+      {
+        "id": "svnWorkflow.mergeSubmenu",
+        "label": "Branch, Merge & Export"
+      },
+      {
+        "id": "svnWorkflow.pane.wcSubmenu",
+        "label": "Working Copy & Files"
+      },
+      {
+        "id": "svnWorkflow.pane.locksSubmenu",
+        "label": "Changelists, Locks & Properties"
+      },
+      {
+        "id": "svnWorkflow.pane.diffSubmenu",
+        "label": "Diff, Patch & Shelve"
+      },
+      {
+        "id": "svnWorkflow.pane.mergeSubmenu",
+        "label": "Branch, Merge & Export"
+      },
+      {
+        "id": "svnWorkflow.pane.title.wcSubmenu",
+        "label": "Working Copy"
+      },
+      {
+        "id": "svnWorkflow.pane.title.listsSubmenu",
+        "label": "Changelists, Locks & Externals"
+      },
+      {
+        "id": "svnWorkflow.pane.title.mergeSubmenu",
+        "label": "Branch, Merge & Export"
+      },
+      {
+        "id": "svnWorkflow.pane.title.patchSubmenu",
+        "label": "Patch & Shelve"
+      },
+      {
+        "id": "svnWorkflow.pane.title.diagSubmenu",
+        "label": "Diagnostics"
+      }
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.webview.json",
+    "build": "npm run typecheck && node esbuild.js",
+    "build:prod": "npm run typecheck && node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "lint": "eslint src test esbuild.js",
+    "test": "vitest run",
+    "test:svn": "vitest run --config vitest.svn.config.ts",
+    "test:integration": "node esbuild.js && node esbuild.js --tests && node ./out/test/integration/runTest.js",
+    "package": "npm run lint && npm run build:prod && vsce package --no-dependencies --allow-missing-repository",
+    "vscode:prepublish": "npm run build:prod"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.20.5",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.1.1",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.15.0",
+    "highlight.js": "^11.12.0",
+    "mocha": "^12.0.3",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.12.1"
+  }
+}

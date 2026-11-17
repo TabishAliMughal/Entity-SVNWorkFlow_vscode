@@ -1,0 +1,45 @@
+# Generated into F:\TrashCache\svn-test-env\run\httpd.conf by start.ps1 (tokens @@X@@ replaced).
+ServerRoot "@@HTTPD@@"
+ServerName 127.0.0.1
+Listen 127.0.0.1:@@HTTP_PORT@@
+Listen 127.0.0.1:@@HTTPS_PORT@@
+PidFile "@@RUN@@/httpd.pid"
+ErrorLog "@@RUN@@/httpd-error.log"
+LogLevel warn
+LogFormat "%h %u %t \"%r\" %>s %b" common
+CustomLog "@@RUN@@/httpd-access.log" common
+
+LoadModule alias_module modules/mod_alias.so
+LoadModule auth_basic_module modules/mod_auth_basic.so
+LoadModule authn_core_module modules/mod_authn_core.so
+LoadModule authn_file_module modules/mod_authn_file.so
+LoadModule authz_core_module modules/mod_authz_core.so
+LoadModule authz_user_module modules/mod_authz_user.so
+LoadModule log_config_module modules/mod_log_config.so
+LoadModule dav_module modules/mod_dav.so
+LoadModule ssl_module modules/mod_ssl.so
+LoadModule dav_svn_module "@@MODSVN@@/mod_dav_svn.so"
+LoadModule authz_svn_module "@@MODSVN@@/mod_authz_svn.so"
+
+SSLSessionCache none
+Mutex default
+
+<Location /svn>
+    DAV svn
+    SVNParentPath "@@REPOS@@"
+    SVNListParentPath On
+    AuthType Basic
+    AuthName "SVN test environment"
+    AuthUserFile "@@AUTH@@/htpasswd"
+    AuthzSVNAccessFile "@@AUTH@@/authz"
+    Require valid-user
+</Location>
+
+<VirtualHost 127.0.0.1:@@HTTP_PORT@@>
+</VirtualHost>
+
+<VirtualHost 127.0.0.1:@@HTTPS_PORT@@>
+    SSLEngine on
+    SSLCertificateFile "@@CERT@@/server.crt"
+    SSLCertificateKeyFile "@@CERT@@/server.key"
+</VirtualHost>
