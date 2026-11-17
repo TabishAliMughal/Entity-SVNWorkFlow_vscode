@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { splitTargets, withTargetArgs } from '../../src/util/targets';
@@ -11,7 +12,7 @@ describe('svn target lists (svn reads --targets files in the ANSI code page)', (
   });
 
   it('builds trailing args with the list file first and inline targets after --', async () => {
-    const dir = fs.mkdtempSync(path.join('F:/TrashCache', 'targets-'));
+    const dir = fs.mkdtempSync(path.join((fs.existsSync('F:\\TrashCache') ? 'F:\\TrashCache' : os.tmpdir()), 'targets-'));
     try {
       let seen: string[] = [];
       await withTargetArgs(dir, ['a.txt', 'caf\u00e9.txt'], async (args) => {

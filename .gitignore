@@ -48,3 +48,6 @@ test-env/*.pid
 docs/
 *.md
 !/README.md
+
+# CI/local scratch error dump
+/error

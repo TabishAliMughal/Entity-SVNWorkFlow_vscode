@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { authDirOf, deleteAuthEntries, listAuthCache, originFromRealm, originOf, parseHashFile } from '../../src/auth/model';
@@ -6,7 +7,7 @@ import { authDirOf, deleteAuthEntries, listAuthCache, originFromRealm, originOf,
 const hash = (pairs: Record<string, string>): string =>
   Object.entries(pairs).map(([k, v]) => `K ${Buffer.byteLength(k)}\n${k}\nV ${Buffer.byteLength(v)}\n${v}\n`).join('') + 'END\n';
 
-const SCRATCH = 'F:\\TrashCache';
+const SCRATCH = (fs.existsSync('F:\\TrashCache') ? 'F:\\TrashCache' : os.tmpdir());
 let root: string;
 beforeEach(() => {
   fs.mkdirSync(SCRATCH, { recursive: true });

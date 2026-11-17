@@ -1,11 +1,12 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BackupVerifyError, createBackup, describeEntry, listBackups, markCompleted, planEntries, pruneCommitted, timestampName, toAbs, toRel, verifyBackup } from '../../src/override/backup';
 import { StatusEntry } from '../../src/svn/xml';
 import { RepoLocks } from '../../src/override/commitLocks';
 
-const ROOT = 'F:\\TrashCache\\override-unit';
+const ROOT = path.join((fs.existsSync('F:\\TrashCache') ? 'F:\\TrashCache' : os.tmpdir()), 'override-unit');
 const WC = path.join(ROOT, 'wc');
 
 const st = (p: string, item: string, extra: Partial<StatusEntry> = {}): StatusEntry => ({ path: path.join(WC, p), item, props: 'none', wcLocked: false, ...extra });

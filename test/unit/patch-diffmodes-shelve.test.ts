@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Layout } from '../../src/branch/model';
@@ -236,7 +237,7 @@ describe('shelf metadata and store', () => {
     expect(slug('a b/c')).not.toBe(slug('a_b/c'));
   });
   it('stores, lists, reads and deletes patch shelves with binaries', async () => {
-    const root = fs.mkdtempSync(path.join(process.env.SVN_TEST_TMP ?? 'F:\\TrashCache', 'shelf-store-'));
+    const root = fs.mkdtempSync(path.join(process.env.SVN_TEST_TMP ?? (fs.existsSync('F:\\TrashCache') ? 'F:\\TrashCache' : os.tmpdir()), 'shelf-store-'));
     try {
       const src = path.join(root, 'bin.dat');
       fs.writeFileSync(src, Buffer.from([0, 1, 2, 255]));
