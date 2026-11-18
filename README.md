@@ -45,6 +45,10 @@ SVN workflows inside VS Code, powered by the `svn.exe` command line client that 
 
 Open Settings and search for "SVN" for the full list.
 
+## Source and issues
+
+https://github.com/TabishAliMughal/Entity-SVNWorkFlow_vscode (report problems under Issues).
+
 ## Security
 
 SVN operations are disabled in untrusted workspaces. Passwords are passed to `svn` on stdin and are never written to the command line, settings or logs. Self-signed https certificates must be confirmed and are pinned by fingerprint.

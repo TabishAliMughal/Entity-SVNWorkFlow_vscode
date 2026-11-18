@@ -6,6 +6,14 @@
   "publisher": "TabishAliMughal",
   "private": true,
   "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TabishAliMughal/Entity-SVNWorkFlow_vscode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TabishAliMughal/Entity-SVNWorkFlow_vscode/issues"
+  },
+  "homepage": "https://github.com/TabishAliMughal/Entity-SVNWorkFlow_vscode#readme",
   "engines": {
     "vscode": "^1.85.0"
   },
