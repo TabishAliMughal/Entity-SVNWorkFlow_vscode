@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { diffLines } from '../../src/diff';
 import { classifyHunks, rangesOverlap } from '../../src/compare/classify';
@@ -84,5 +86,16 @@ describe('overview ruler mapping', () => {
   it('shows the visible window as a thumb', () => {
     expect(viewportThumb(500, 250, 1000, 200)).toEqual({ top: 100, height: 50 });
     expect(viewportThumb(0, 100, 0, 200)).toEqual({ top: 0, height: 200 });
+  });
+});
+
+describe('class colours', () => {
+  const read = (f: string): string => readFileSync(join(__dirname, '../..', f), 'utf8');
+  it('incoming-only is the default blue with a "Safe to pull" tooltip; outgoing and mixed are grey', () => {
+    const css = read('media/compare/compare.css');
+    expect(read('src/compare/webview/main.ts')).toContain("incoming: 'Safe to pull'");
+    expect(css).not.toMatch(/\.conn\.k-in path/);
+    expect(css).toMatch(/\.conn\.k-out path, \.conn\.k-mx path/);
+    expect(css).toMatch(/\.ruler \.k-in \{ background: var\(--vscode-button-background/);
   });
 });

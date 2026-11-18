@@ -23,6 +23,8 @@ body { color: var(--vscode-editor-foreground); background: var(--vscode-editor-b
 .ruler .k-insert { background: var(--vscode-editorGutter-addedBackground, #2ea043); }
 .ruler .k-delete { background: var(--vscode-editorGutter-deletedBackground, #f85149); }
 .ruler .k-modify { background: var(--vscode-editorGutter-modifiedBackground, #1b81a8); }
+.ruler .k-in { background: var(--vscode-button-background, #0e639c); }
+.ruler .k-out { background: var(--cmp-grey); }
 .ruler .k-cf { background: var(--vscode-editorError-foreground, #f14c4c); }
 .heads .ghead, .gutter { flex: 0 0 48px; width: 48px; text-align: center; }
 .main { flex: 1 1 auto; display: flex; min-height: 0; }
@@ -52,13 +54,13 @@ mark.w.ins { background: var(--vscode-diffEditor-insertedTextBackground, rgba(15
 .conn { position: absolute; left: 0; overflow: visible; pointer-events: none; }
 .conn path { fill: color-mix(in srgb, var(--vscode-editorGutter-modifiedBackground, #1b81a8) 28%, transparent); stroke: var(--vscode-editorGutter-modifiedBackground, #1b81a8); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .conn.cur path { fill: color-mix(in srgb, var(--vscode-focusBorder, #007fd4) 40%, transparent); stroke: var(--vscode-focusBorder, #007fd4); }
-/* change classes via BASE: grey = only incoming or only outgoing, red = changed locally and on the server */
+/* change classes via BASE: blue (default) = incoming only, safe to pull; grey = outgoing only or mixed; red = changed locally and on the server */
 body { --cmp-grey: color-mix(in srgb, var(--vscode-editor-foreground) 42%, var(--vscode-editor-background)); --cmp-red: var(--vscode-editorError-foreground, #f14c4c); }
-.conn.k-in path, .conn.k-out path { fill: color-mix(in srgb, var(--cmp-grey) 22%, transparent); stroke: var(--cmp-grey); }
+.conn.k-out path, .conn.k-mx path { fill: color-mix(in srgb, var(--cmp-grey) 22%, transparent); stroke: var(--cmp-grey); }
 .conn.k-cf path { fill: color-mix(in srgb, var(--cmp-red) 30%, transparent); stroke: var(--cmp-red); }
 .conn.cur path { stroke-width: 2; }
-button.pull.k-in, button.pull.k-out { background: var(--cmp-grey); color: var(--vscode-editor-background); }
-button.pull.k-in:hover, button.pull.k-out:hover { background: color-mix(in srgb, var(--cmp-grey) 80%, var(--vscode-editor-foreground)); }
+button.pull.k-out, button.pull.k-mx { background: var(--cmp-grey); color: var(--vscode-editor-background); }
+button.pull.k-out:hover, button.pull.k-mx:hover { background: color-mix(in srgb, var(--cmp-grey) 80%, var(--vscode-editor-foreground)); }
 button.pull.k-cf { background: var(--cmp-red); color: #fff; }
 .row.cf.del, .row.cf.ins { background: color-mix(in srgb, var(--cmp-red) 24%, transparent); }
 .row.cf.del .ln, .row.cf.ins .ln { background: color-mix(in srgb, var(--cmp-red) 24%, var(--vscode-editor-background)); }

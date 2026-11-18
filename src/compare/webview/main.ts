@@ -292,15 +292,15 @@ function rowsHtml(side: 'left' | 'right', first: number, last: number): Document
 }
 
 const CLASS_TITLE = {
-  incoming: 'Changed on the server',
+  incoming: 'Safe to pull',
   outgoing: 'Changed locally (outgoing)',
   conflict: 'Changed locally and on the server',
-  mixed: '',
+  mixed: 'Changed locally and on the server in the same section; review before pulling',
 } as const;
 
 function classSuffix(hunk: number): string {
   const c = data?.classes?.[hunk];
-  return c === 'incoming' ? ' k-in' : c === 'outgoing' ? ' k-out' : c === 'conflict' ? ' k-cf' : '';
+  return c === 'incoming' ? ' k-in' : c === 'outgoing' ? ' k-out' : c === 'conflict' ? ' k-cf' : c === 'mixed' ? ' k-mx' : '';
 }
 
 function connector(sp: HunkSpan): SVGSVGElement {
@@ -351,7 +351,7 @@ function drawRuler(): void {
   for (const m of markers) {
     const hunk = data?.hunks[m.hunk];
     const cls = data?.classes?.[m.hunk];
-    const kind = cls === 'conflict' ? 'cf' : hunk?.type ?? 'modify';
+    const kind = cls === 'conflict' ? 'cf' : cls === 'incoming' ? 'in' : cls === 'outgoing' || cls === 'mixed' ? 'out' : hunk?.type ?? 'modify';
     const d = el('div', `mark k-${kind}` + (m.hunk === cur ? ' cur' : ''));
     d.style.top = `${m.top}px`;
     d.style.height = `${m.height}px`;
