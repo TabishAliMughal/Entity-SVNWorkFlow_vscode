@@ -4,6 +4,7 @@ import { markWords, type Range } from '../lineHtml';
 import {
   applyEditToLines, clampPos, colAtVisual, comparePos, endPosition, leadingWhitespace, reindent, textInRange, visualCol, wordAt, wordLeft, wordRight, type Pos,
 } from '../editing';
+import { hunkAtY, rowAtY, rulerMarkers, viewportThumb, type RulerMarker } from '../ruler';
 import { rowAuthorLabel, sideTitle, type CompactBlame } from '../annotate';
 import type { DataMessage, FromWebview, ToWebview } from '../protocol';
 
@@ -38,6 +39,7 @@ const sides: { left: SideView; right: SideView } = {
 let spans: HunkSpan[] = [];
 /** Blame of revision sides (per line), used to label changed sections with their authors. */
 const blame: { left?: CompactBlame; right?: CompactBlame } = {};
+let markers: RulerMarker[] = [];
 let typing: 'left' | 'right' | null = null;
 let caret: Pos = { line: 0, col: 0 };
 let anchor: Pos | null = null;
@@ -64,7 +66,8 @@ const leftHead = el('div', 'head');
 const rightHead = el('div', 'head');
 const heads = el('div', 'heads');
 const gutterHead = el('div', 'ghead');
-heads.append(leftHead, gutterHead, rightHead);
+const rulerHead = el('div', 'rhead');
+heads.append(leftHead, gutterHead, rightHead, rulerHead);
 const leftPane = el('div', 'pane');
 const gutter = el('div', 'gutter');
 const rightPane = el('div', 'pane');
@@ -81,7 +84,10 @@ ta.setAttribute('aria-label', 'Local file editor');
 leftPane.append(leftBox, overlays.left);
 rightPane.append(rightBox, overlays.right);
 gutter.append(gBox);
-main.append(leftPane, gutter, rightPane);
+const ruler = el('div', 'ruler');
+const thumb = el('div', 'thumb');
+ruler.append(thumb);
+main.append(leftPane, gutter, rightPane, ruler);
 const noticeEl = el('div', 'notice');
 app.append(bar, banner, heads, main, noticeEl, ta);
 
@@ -204,6 +210,7 @@ function applyData(d: DataMessage): void {
   for (const l of sides.right.lines) if (l.length > maxLen) maxLen = l.length;
   layoutSizes();
   render(true);
+  drawRuler();
 }
 
 function layoutSizes(): void {
@@ -258,6 +265,7 @@ function rowsHtml(side: 'left' | 'right', first: number, last: number): Document
       classes.push(side === 'left' ? 'del' : 'ins');
     }
     if (r.hunk >= 0 && r.hunk === cur) classes.push('cur');
+    if (r.hunk >= 0 && data?.classes?.[r.hunk] === 'conflict') classes.push('cf');
     d.className = classes.join(' ');
     d.dataset.row = String(i);
     d.dataset.line = String(idx);
@@ -283,13 +291,25 @@ function rowsHtml(side: 'left' | 'right', first: number, last: number): Document
   return frag;
 }
 
+const CLASS_TITLE = {
+  incoming: 'Changed on the server',
+  outgoing: 'Changed locally (outgoing)',
+  conflict: 'Changed locally and on the server',
+  mixed: '',
+} as const;
+
+function classSuffix(hunk: number): string {
+  const c = data?.classes?.[hunk];
+  return c === 'incoming' ? ' k-in' : c === 'outgoing' ? ' k-out' : c === 'conflict' ? ' k-cf' : '';
+}
+
 function connector(sp: HunkSpan): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
   const h = sp.count * ROW_H;
   const yl = sp.leftCount * ROW_H;
   const yr = sp.rightCount * ROW_H;
   const mid = GUTTER_W / 2;
-  svg.setAttribute('class', 'conn' + (sp.hunk === cur ? ' cur' : ''));
+  svg.setAttribute('class', 'conn' + classSuffix(sp.hunk) + (sp.hunk === cur ? ' cur' : ''));
   svg.setAttribute('width', String(GUTTER_W));
   svg.setAttribute('height', String(h));
   svg.style.top = `${sp.first * ROW_H}px`;
@@ -312,9 +332,10 @@ function gutterHtml(first: number, last: number): DocumentFragment {
     const sp = spans[k];
     frag.append(connector(sp));
     if (data?.editable) {
-      const b = el('button', 'pull', data.editable === 'left' ? '←' : '→');
+      const b = el('button', 'pull' + classSuffix(sp.hunk), data.editable === 'left' ? '←' : '→');
       b.dataset.hunk = String(sp.hunk);
-      b.title = data.editable === 'left' ? 'Pull this change into the left (local) file' : 'Pull this change into the right (local) file';
+      const why = CLASS_TITLE[data.classes?.[sp.hunk] ?? 'mixed'];
+      b.title = (why ? why + '. ' : '') + (data.editable === 'left' ? 'Pull this change into the left (local) file' : 'Pull this change into the right (local) file');
       b.style.top = `${arrowTop(sp, ROW_H, BTN_H)}px`;
       b.style.left = `${(GUTTER_W - BTN_W) / 2}px`;
       frag.append(b);
@@ -322,6 +343,70 @@ function gutterHtml(first: number, last: number): DocumentFragment {
   }
   return frag;
 }
+
+function drawRuler(): void {
+  const h = ruler.clientHeight;
+  markers = data && !data.notice ? rulerMarkers(spans, rows.length, h) : [];
+  const frag = document.createDocumentFragment();
+  for (const m of markers) {
+    const hunk = data?.hunks[m.hunk];
+    const cls = data?.classes?.[m.hunk];
+    const kind = cls === 'conflict' ? 'cf' : hunk?.type ?? 'modify';
+    const d = el('div', `mark k-${kind}` + (m.hunk === cur ? ' cur' : ''));
+    d.style.top = `${m.top}px`;
+    d.style.height = `${m.height}px`;
+    frag.append(d);
+  }
+  ruler.replaceChildren(thumb, frag);
+  updateThumb();
+}
+
+function updateThumb(): void {
+  const t = viewportThumb(leftPane.scrollTop, leftPane.clientHeight, rows.length * ROW_H, ruler.clientHeight);
+  thumb.style.top = `${t.top}px`;
+  thumb.style.height = `${t.height}px`;
+}
+
+function selectHunk(hunk: number): void {
+  cur = hunk;
+  const i = starts.length ? hunk : -1;
+  if (i >= 0 && spans[hunk]) {
+    const y = Math.max(0, spans[hunk].first * ROW_H - leftPane.clientHeight / 3);
+    leftPane.scrollTop = y;
+    rightPane.scrollTop = y;
+    gutter.scrollTop = y;
+  }
+  updateCounter();
+  render(true);
+  drawRuler();
+}
+
+function rulerPointer(e: MouseEvent): void {
+  const y = e.clientY - ruler.getBoundingClientRect().top;
+  const hunk = hunkAtY(markers, y);
+  if (hunk !== undefined) {
+    if (hunk !== cur) selectHunk(hunk);
+    return;
+  }
+  const row = rowAtY(y, rows.length, ruler.clientHeight);
+  const top = Math.max(0, row * ROW_H - leftPane.clientHeight / 2);
+  leftPane.scrollTop = top;
+  rightPane.scrollTop = top;
+  gutter.scrollTop = top;
+}
+let rulerDrag = false;
+ruler.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  rulerDrag = true;
+  rulerPointer(e);
+});
+document.addEventListener('mousemove', (e) => {
+  if (rulerDrag) rulerPointer(e);
+});
+document.addEventListener('mouseup', () => {
+  rulerDrag = false;
+});
 
 function goto(dir: number): void {
   if (!starts.length) return;
@@ -332,6 +417,7 @@ function goto(dir: number): void {
   gutter.scrollTop = y;
   updateCounter();
   render(true);
+  drawRuler();
 }
 
 let ticking = false;
@@ -347,6 +433,7 @@ function onScroll(from: HTMLElement): void {
     requestAnimationFrame(() => {
       ticking = false;
       render();
+      updateThumb();
     });
   }
 }
@@ -355,7 +442,10 @@ rightPane.addEventListener('scroll', () => onScroll(rightPane));
 gutter.addEventListener('wheel', (e) => {
   leftPane.scrollTop += e.deltaY;
 });
-window.addEventListener('resize', () => render(true));
+window.addEventListener('resize', () => {
+  render(true);
+  drawRuler();
+});
 
 main.addEventListener('click', (e) => {
   const pull = (e.target as HTMLElement).closest('button.pull') as HTMLButtonElement | null;

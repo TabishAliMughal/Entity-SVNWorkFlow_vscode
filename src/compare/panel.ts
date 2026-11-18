@@ -9,6 +9,7 @@ import { repoLocks } from '../override/commitLocks';
 import { pathKey } from '../incoming/model';
 import { parseUpdateConflicts } from '../ops/targets';
 import { shouldAutoUpdate } from './uptodate';
+import { classifyHunks, type HunkClass } from './classify';
 import { compactBlame, type CompactBlame, type SideMeta } from './annotate';
 import { contentSecurityPolicy } from '../util/webviewHtml';
 import type { Services } from '../services';
@@ -103,6 +104,9 @@ class ComparePanel {
   private readonly blameCache = new Map<string, Promise<CompactBlame | undefined>>();
   private upToDate?: string;
   private updating = false;
+  /** BASE text of the local file: the common ancestor for classifying hunks (local vs server). */
+  private baseText?: string;
+  private classes?: HunkClass[];
 
   constructor(private readonly ctx: CompareContext, private req: CompareRequest, private key: string) {
     this.src = { left: req.left, right: req.right };
@@ -186,6 +190,7 @@ class ComparePanel {
     try {
       const [left, right] = await Promise.all([this.loadSide(this.src.left), this.loadSide(this.src.right)]);
       await Promise.all([this.loadMeta(left), this.loadMeta(right)]);
+      this.baseText = await this.loadBase(left, right);
       this.sides = { left, right };
       await this.recompute(false);
     } catch (e) {
@@ -242,6 +247,19 @@ class ComparePanel {
     side.meta = await p;
   }
 
+  /** BASE of the local file, only when a local file is compared with a server revision (otherwise no 3-way classes). */
+  private async loadBase(left: SideState, right: SideState): Promise<string | undefined> {
+    const l = left.src;
+    const r = right.src;
+    if (l.kind !== 'local' || !l.repoName || r.kind !== 'rev' || r.rev === 'BASE' || left.missing || left.binary || right.binary) return undefined;
+    try {
+      const f = await fetchContent(this.ctx.services.client, { repoName: l.repoName, target: l.fsPath, rev: 'BASE' });
+      return f.missing || f.binary ? undefined : f.text;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** Blame of a revision source, sent after the data message; the view maps it onto the changed hunks. */
   private async sendBlame(which: 'left' | 'right'): Promise<void> {
     const side = this.sides[which];
@@ -284,6 +302,7 @@ class ComparePanel {
     } else {
       this.diff = diffLines(left.text, right.text, this.opts);
       if (left.text !== right.text) this.upToDate = undefined;
+      this.classes = this.baseText === undefined ? undefined : classifyHunks(this.baseText, left.text, right.text, this.diff.hunks, this.opts);
     }
     this.send();
     void this.autoUpdate().catch((e) => reportError(this.ctx.services, e));
@@ -355,6 +374,7 @@ class ComparePanel {
       right: this.info(this.sides.right),
       blocks: d?.blocks ?? [],
       hunks: d?.hunks ?? [],
+      classes: this.classes,
       identical: d?.identical ?? false,
       editable: this.notice ? null : pickEditable(this.req),
       upToDate: d?.identical && this.sides.left.text === this.sides.right.text ? this.upToDate : undefined,

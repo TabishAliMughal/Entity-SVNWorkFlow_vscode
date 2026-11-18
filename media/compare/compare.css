@@ -15,6 +15,15 @@ body { color: var(--vscode-editor-foreground); background: var(--vscode-editor-b
 .notice { padding: 24px; font-family: var(--vscode-font-family, sans-serif); font-size: 14px; }
 .heads { display: flex; font-family: var(--vscode-font-family, sans-serif); font-size: 12px; border-bottom: 1px solid var(--vscode-panel-border, #444); }
 .heads .head { flex: 1 1 0; min-width: 0; padding: 3px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-descriptionForeground); }
+.heads .rhead, .ruler { flex: 0 0 14px; width: 14px; }
+.ruler { position: relative; cursor: pointer; background: var(--vscode-editorOverviewRuler-background, var(--vscode-editor-background)); border-left: 1px solid var(--vscode-panel-border, #444); user-select: none; }
+.ruler .thumb { position: absolute; left: 0; right: 0; background: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.3)); pointer-events: none; }
+.ruler .mark { position: absolute; left: 2px; right: 2px; border-radius: 1px; pointer-events: none; }
+.ruler .mark.cur { left: 0; right: 0; outline: 1px solid var(--vscode-editor-foreground); z-index: 1; }
+.ruler .k-insert { background: var(--vscode-editorGutter-addedBackground, #2ea043); }
+.ruler .k-delete { background: var(--vscode-editorGutter-deletedBackground, #f85149); }
+.ruler .k-modify { background: var(--vscode-editorGutter-modifiedBackground, #1b81a8); }
+.ruler .k-cf { background: var(--vscode-editorError-foreground, #f14c4c); }
 .heads .ghead, .gutter { flex: 0 0 48px; width: 48px; text-align: center; }
 .main { flex: 1 1 auto; display: flex; min-height: 0; }
 .pane { flex: 1 1 0; min-width: 0; overflow: auto; position: relative; }
@@ -43,6 +52,17 @@ mark.w.ins { background: var(--vscode-diffEditor-insertedTextBackground, rgba(15
 .conn { position: absolute; left: 0; overflow: visible; pointer-events: none; }
 .conn path { fill: color-mix(in srgb, var(--vscode-editorGutter-modifiedBackground, #1b81a8) 28%, transparent); stroke: var(--vscode-editorGutter-modifiedBackground, #1b81a8); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .conn.cur path { fill: color-mix(in srgb, var(--vscode-focusBorder, #007fd4) 40%, transparent); stroke: var(--vscode-focusBorder, #007fd4); }
+/* change classes via BASE: grey = only incoming or only outgoing, red = changed locally and on the server */
+body { --cmp-grey: color-mix(in srgb, var(--vscode-editor-foreground) 42%, var(--vscode-editor-background)); --cmp-red: var(--vscode-editorError-foreground, #f14c4c); }
+.conn.k-in path, .conn.k-out path { fill: color-mix(in srgb, var(--cmp-grey) 22%, transparent); stroke: var(--cmp-grey); }
+.conn.k-cf path { fill: color-mix(in srgb, var(--cmp-red) 30%, transparent); stroke: var(--cmp-red); }
+.conn.cur path { stroke-width: 2; }
+button.pull.k-in, button.pull.k-out { background: var(--cmp-grey); color: var(--vscode-editor-background); }
+button.pull.k-in:hover, button.pull.k-out:hover { background: color-mix(in srgb, var(--cmp-grey) 80%, var(--vscode-editor-foreground)); }
+button.pull.k-cf { background: var(--cmp-red); color: #fff; }
+.row.cf.del, .row.cf.ins { background: color-mix(in srgb, var(--cmp-red) 24%, transparent); }
+.row.cf.del .ln, .row.cf.ins .ln { background: color-mix(in srgb, var(--cmp-red) 24%, var(--vscode-editor-background)); }
+.row.cf mark.w { background: color-mix(in srgb, var(--cmp-red) 45%, transparent); }
 .overlay { position: absolute; top: 0; left: 0; width: 0; height: 0; pointer-events: none; z-index: 0; }
 .selrect { position: absolute; height: 20px; background: color-mix(in srgb, var(--vscode-editor-selectionBackground, #264f78) 60%, transparent); }
 .selrect.idle { background: color-mix(in srgb, var(--vscode-editor-inactiveSelectionBackground, #3a3d41) 70%, transparent); }

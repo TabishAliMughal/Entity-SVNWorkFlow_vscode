@@ -1,6 +1,7 @@
 import type { DiffBlock, Hunk, IgnoreWhitespace } from '../diff';
 import type { Pos } from './editing';
 import type { CompactBlame, SideMeta } from './annotate';
+import type { HunkClass } from './classify';
 
 export interface SideInfo {
   name: string;
@@ -34,6 +35,8 @@ export interface DataMessage {
   right: SideInfo;
   blocks: DiffBlock[];
   hunks: Hunk[];
+  /** Per hunk, via BASE as common ancestor; absent when there is no BASE to compare with (neutral styling). */
+  classes?: HunkClass[];
   identical: boolean;
   /** Which side accepts pulls (the arrows point towards it); null = read only. */
   editable: 'left' | 'right' | null;

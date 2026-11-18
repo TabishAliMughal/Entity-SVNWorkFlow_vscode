@@ -1,14 +1,16 @@
 name: Package and publish
 
 on:
-  release:
-    types: [published]
   push:
-    tags: ['v*']
+    branches: [main]
+    paths-ignore:
+      - '.vscode/**'
+      - 'test-env/**'
   workflow_dispatch:
 
+# Releases never overlap; a queued run waits instead of cancelling a publish in flight.
 concurrency:
-  group: publish-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 env:
@@ -18,33 +20,49 @@ jobs:
   build:
     runs-on: windows-latest
     permissions:
-      contents: write
+      contents: read
     outputs:
       vsix: ${{ steps.meta.outputs.vsix }}
+      version: ${{ steps.version.outputs.version }}
     defaults:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
-      - name: Verify tag matches package.json version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          pkg="$(node -p "require('./package.json').version")"
-          tag="${GITHUB_REF_NAME#v}"
-          if [ "$pkg" != "$tag" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $pkg"
-            exit 1
-          fi
-
       - run: npm ci
       - run: npm run lint
       - run: npm test
+
+      # next = package.json version if it is above the latest v* tag (manual minor/major bump),
+      # otherwise latest tag + patch. Tags are the source of truth; nothing is committed back.
+      - name: Compute release version
+        id: version
+        run: |
+          next="$(node -e '
+            const { execSync } = require("child_process");
+            const parse = v => v.split(".").map(Number);
+            const cmp = (a, b) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] - b[i]; return 0; };
+            const pkg = parse(require("./package.json").version);
+            const tags = execSync("git tag --list \"v*\"").toString().split("\n")
+              .map(t => t.trim()).filter(t => /^v\d+\.\d+\.\d+$/.test(t)).map(t => parse(t.slice(1)));
+            tags.sort(cmp);
+            const last = tags.length ? tags[tags.length - 1] : null;
+            let next = pkg;
+            if (last && cmp(pkg, last) <= 0) next = [last[0], last[1], last[2] + 1];
+            console.log(next.join("."));
+          ')"
+          echo "Releasing $next"
+          npm version "$next" --no-git-tag-version --allow-same-version
+          echo "version=$next" >> "$GITHUB_OUTPUT"
 
       - name: Package .vsix
         run: npm run package
@@ -52,64 +70,52 @@ jobs:
       - name: Locate .vsix
         id: meta
         run: |
-          name="$(node -p "require('./package.json').name + '-' + require('./package.json').version")".vsix
+          name="$(node -p "require('./package.json').name + '-' + require('./package.json').version").vsix"
           test -f "$name"
           echo "vsix=$name" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: vsix
           path: ${{ steps.meta.outputs.vsix }}
           if-no-files-found: error
 
-      - name: Attach .vsix to the GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VSIX: ${{ steps.meta.outputs.vsix }}
-        run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$VSIX" --clobber
-          else
-            echo "::notice::No GitHub release for $GITHUB_REF_NAME yet; .vsix is only in the workflow artifact."
-          fi
-
   publish:
     needs: build
-    if: vars.PUBLISH_MARKETPLACE == 'true' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: Production
     permissions:
       id-token: write
       contents: read
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: vsix
 
-      # Default: Marketplace Trusted Publishing (policy on the publisher, no Entra app needed).
       - name: Publish (Marketplace trusted publishing)
-        if: vars.PUBLISH_AUTH != 'entra'
         env:
           VSIX: ${{ needs.build.outputs.vsix }}
         run: npx --yes @vscode/vsce@${{ env.VSCE_VERSION }} publish --oidc --packagePath "$VSIX" --skip-duplicate
 
-      # Alternative: Microsoft Entra workload identity federation. Set vars.PUBLISH_AUTH to 'entra'.
-      - name: Azure login (workload identity federation)
-        if: vars.PUBLISH_AUTH == 'entra'
-        uses: azure/login@v2
+  release:
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          allow-no-subscriptions: ${{ secrets.AZURE_SUBSCRIPTION_ID == '' }}
+          name: vsix
 
-      - name: Publish (Entra ID)
-        if: vars.PUBLISH_AUTH == 'entra'
+      - name: Tag and create GitHub release
         env:
+          GH_TOKEN: ${{ github.token }}
           VSIX: ${{ needs.build.outputs.vsix }}
-        run: npx --yes @vscode/vsce@${{ env.VSCE_VERSION }} publish --azure-credential --packagePath "$VSIX" --skip-duplicate
+          TAG: v${{ needs.build.outputs.version }}
+        run: |
+          gh release create "$TAG" "$VSIX" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "$TAG" --generate-notes --latest

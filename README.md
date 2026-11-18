@@ -65,7 +65,7 @@ Press F5 ("Run Extension") to start an Extension Development Host. The local SVN
 
 ## Publishing
 
-Pushing a `v*` tag or publishing a GitHub release runs `.github/workflows/publish.yml`: lint, unit tests, package the `.vsix`, attach it to the release and, when enabled, publish it to the VS Code Marketplace using GitHub OIDC (no stored token).
+Every push to `main` runs `.github/workflows/publish.yml`: lint, unit tests, auto-versioned package (patch bump from the latest `v*` tag; set a higher `version` in package.json for minor/major), publish to the VS Code Marketplace via GitHub OIDC, then tag and GitHub release with the `.vsix`. Add `[skip ci]` to a commit message to skip a release. See `docs/packaging.md`.
 
 ## License
 
