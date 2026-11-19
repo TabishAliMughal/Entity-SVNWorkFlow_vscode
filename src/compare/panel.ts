@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { diffLines, applyHunk, applyHunkReverse, splitLines, type DiffOptions, type DiffResult } from '../diff';
 import * as path from 'node:path';
 import { reportError } from '../util/ui';
+import { contentSecurityPolicy } from '../util/webviewHtml';
 import { pegSafe } from '../svn/client';
 import { parseBlame, parseInfo } from '../svn/xml';
 import { repoLocks } from '../override/commitLocks';
@@ -11,16 +12,13 @@ import { parseUpdateConflicts } from '../ops/targets';
 import { shouldAutoUpdate } from './uptodate';
 import { classifyHunks, type HunkClass } from './classify';
 import { compactBlame, type CompactBlame, type SideMeta } from './annotate';
-import { contentSecurityPolicy } from '../util/webviewHtml';
 import type { Services } from '../services';
 import { decodeContent } from './content';
 import { fetchContent, resolveCatTarget } from './fetch';
 import { incomingUri } from './provider';
 import { applyAllHunks, minimalEdit } from './pull';
-import { EditHistory } from './history';
-import type { Pos } from './editing';
-import { languageFor } from './langs';
-import type { DataMessage, FromWebview, SideInfo, ToWebview } from './protocol';
+import { monacoLanguageFor } from './langs';
+import type { DataMessage, FromWebview, SideInfo, TextEdit, ToWebview } from './protocol';
 import { normalizeRequest, pickEditable, revLabel, sourceName, type CompareRequest, type Source } from './sources';
 import { pickRevision } from './revisions';
 
@@ -44,6 +42,25 @@ function defaultOptions(): Required<DiffOptions> {
     ignoreEol: c.get<boolean>('ignoreEol', false),
     ignoreCase: c.get<boolean>('ignoreCase', false),
   };
+}
+
+/** Remembers the compare options as the svnWorkflow.diff.* settings so every new tab and later session starts with them. */
+let saving: Promise<void> = Promise.resolve();
+/** Serialised: overlapping settings.json writes from quick successive toggles could otherwise land out of order. */
+function saveOptions(o: Required<DiffOptions>): Promise<void> {
+  saving = saving.then(() => writeOptions(o)).catch(() => undefined);
+  return saving;
+}
+
+async function writeOptions(o: Required<DiffOptions>): Promise<void> {
+  const c = vscode.workspace.getConfiguration('svnWorkflow.diff');
+  for (const [key, value] of Object.entries(o)) {
+    const set = c.inspect(key);
+    await c.update(key, value, vscode.ConfigurationTarget.Global);
+    // a workspace-level value would otherwise win over the global one we just wrote
+    if (set?.workspaceValue !== undefined) await c.update(key, value, vscode.ConfigurationTarget.Workspace);
+    if (set?.workspaceFolderValue !== undefined) await c.update(key, value, vscode.ConfigurationTarget.WorkspaceFolder);
+  }
 }
 
 const BINARY_NOTICE = 'Binary file: no text diff is shown.';
@@ -92,12 +109,8 @@ class ComparePanel {
   private ready = false;
   private timer?: NodeJS.Timeout;
   private src: { left: Source; right: Source };
-  private readonly history = new EditHistory();
   private queue: Promise<void> = Promise.resolve();
   private ackSeq = 0;
-  private pendingCaret?: Pos;
-  /** Document version right after our last own edit; a different version means someone else edited and our history is stale. */
-  private ownVersion = -1;
 
   reuseKey?: string;
   private readonly metaCache = new Map<string, Promise<SideMeta | undefined>>();
@@ -146,9 +159,7 @@ class ComparePanel {
     this.req = req;
     this.src = { left: req.left, right: req.right };
     this.sides = { left: this.emptySide(req.left), right: this.emptySide(req.right) };
-    this.history.clear();
     this.upToDate = undefined;
-    this.pendingCaret = { line: 0, col: 0 };
     this.panel.title = req.title ?? `${sourceName(req.left)}: compare`;
     await this.reload();
   }
@@ -168,9 +179,12 @@ class ComparePanel {
     const w = this.panel.webview;
     const nonce = crypto.randomBytes(16).toString('base64');
     const script = w.asWebviewUri(vscode.Uri.joinPath(this.ctx.extensionUri, 'dist', 'compare', 'webview.js'));
-    const css = w.asWebviewUri(vscode.Uri.joinPath(this.ctx.extensionUri, 'media', 'compare', 'compare.css'));
-    const csp = contentSecurityPolicy(w.cspSource, nonce);
-    return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="stylesheet" href="${css}"><title>Compare</title></head><body><div id="app"></div><script nonce="${nonce}" src="${script}"></script></body></html>`;
+    const css = ['dist/compare/webview.css', 'media/compare/compare.css']
+      .map((f) => `<link rel="stylesheet" href="${w.asWebviewUri(vscode.Uri.joinPath(this.ctx.extensionUri, ...f.split('/')))}">`)
+      .join('');
+    // Monaco injects <style> rules for decorations and theming at runtime, which a nonce cannot cover; scripts stay nonce-only. No worker-src: Monaco runs its editor worker in the main thread.
+    const csp = contentSecurityPolicy(w.cspSource, nonce, { inlineStyles: true });
+    return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width, initial-scale=1.0">${css}<title>Compare</title></head><body><div id="app"></div><script nonce="${nonce}" src="${script}"></script></body></html>`;
   }
 
   private post(m: ToWebview): void {
@@ -346,7 +360,7 @@ class ComparePanel {
     const info: SideInfo = {
       name: sourceName(src),
       label: side.missing ? `${label} (does not exist)` : label,
-      lang: languageFor(sourceName(src)),
+      lang: monacoLanguageFor(sourceName(src)),
       lineCount: splitLines(side.text).length,
       missing: side.missing,
       encoding: side.encoding,
@@ -382,9 +396,7 @@ class ComparePanel {
       canPickRevision: [this.src.left, this.src.right].some((s) => s.kind === 'rev' && s.rev !== 'BASE'),
       typing: this.canType(),
       ackSeq: this.ackSeq,
-      caret: this.pendingCaret,
     };
-    this.pendingCaret = undefined;
     this.post(msg);
     for (const w of ['left', 'right'] as const) if (msg[w].lines) void this.sendBlame(w);
   }
@@ -399,6 +411,7 @@ class ComparePanel {
           break;
         case 'options':
           this.opts = { ignoreWhitespace: m.ignoreWhitespace, ignoreEol: m.ignoreEol, ignoreCase: m.ignoreCase };
+          void saveOptions(this.opts);
           await this.recompute(false);
           break;
         case 'pull':
@@ -408,15 +421,13 @@ class ComparePanel {
           await this.enqueue(() => this.pull(m.version, undefined));
           break;
         case 'edit':
-          await this.enqueue(() => this.userEdit(m.seq, m.start, m.end, m.text));
-          break;
-        case 'undo':
-        case 'redo':
-          await this.enqueue(() => this.undoRedo(m.seq, m.type === 'undo'));
+          await this.enqueue(() => this.userEdit(m.seq, m.edits));
           break;
         case 'save':
-          await this.editDoc()?.save();
-          this.scheduleRefresh();
+          await this.enqueue(async () => {
+            await this.editDoc()?.save();
+            this.scheduleRefresh();
+          });
           break;
         case 'openAt':
           await this.openAt(m.side, m.line);
@@ -453,51 +464,19 @@ class ComparePanel {
     return !!s && s.src.kind === 'local' && !s.missing && !!this.editDoc();
   }
 
-  /** Replaces a document range through a WorkspaceEdit (undoable, leaves the file dirty). */
-  private async replaceRange(doc: vscode.TextDocument, range: vscode.Range, text: string): Promise<boolean> {
-    const we = new vscode.WorkspaceEdit();
-    we.replace(doc.uri, range, text);
-    const ok = await vscode.workspace.applyEdit(we);
-    if (ok) this.ownVersion = doc.version;
-    return ok;
-  }
-
-  private async userEdit(seq: number, start: Pos, end: Pos, text: string): Promise<void> {
+  /** Applies the webview's (Monaco's) edits to the document in one undoable WorkspaceEdit; leaves the file dirty. */
+  private async userEdit(seq: number, edits: TextEdit[]): Promise<void> {
     const side = this.editSide();
     const doc = this.editDoc();
     try {
       if (!side || !doc || !this.canType()) return;
-      const range = doc.validateRange(new vscode.Range(start.line, start.col, end.line, end.col));
-      const removed = doc.getText(range);
-      if (removed === '' && text === '') return;
-      const from = { line: range.start.line, col: range.start.character };
-      const stale = doc.version !== this.ownVersion;
-      if (await this.replaceRange(doc, range, text)) {
-        if (stale) this.history.clear();
-        this.history.record({ start: from, removed, inserted: text, time: Date.now() });
-      }
+      const we = new vscode.WorkspaceEdit();
+      for (const e of edits) we.replace(doc.uri, doc.validateRange(new vscode.Range(e.start.line, e.start.col, e.end.line, e.end.col)), e.text);
+      await vscode.workspace.applyEdit(we);
     } finally {
       this.ackSeq = seq;
       if (side) side.sent = undefined;
       this.scheduleRefresh();
-    }
-  }
-
-  private async undoRedo(seq: number, undo: boolean): Promise<void> {
-    const side = this.editSide();
-    const doc = this.editDoc();
-    try {
-      if (!side || !doc) return;
-      if (doc.version !== this.ownVersion) this.history.clear();
-      const step = undo ? this.history.undo() : this.history.redo();
-      if (!step) return;
-      const range = doc.validateRange(new vscode.Range(step.start.line, step.start.col, step.end.line, step.end.col));
-      if (await this.replaceRange(doc, range, step.text)) this.pendingCaret = step.caret;
-      else this.history.clear();
-    } finally {
-      this.ackSeq = seq;
-      clearTimeout(this.timer);
-      await this.recompute(true);
     }
   }
 
@@ -539,14 +518,9 @@ class ComparePanel {
     } else {
       we.replace(uri, new vscode.Range(doc.positionAt(edit.start), doc.positionAt(edit.end)), edit.text);
     }
-    const before = doc && !target.missing ? { start: doc.positionAt(edit.start), removed: target.text.slice(edit.start, edit.end) } : undefined;
     if (!(await vscode.workspace.applyEdit(we))) {
       void vscode.window.showErrorMessage('Could not apply the change to the local file.');
       return;
-    }
-    if (doc && before) {
-      this.ownVersion = doc.version;
-      this.history.record({ start: { line: before.start.line, col: before.start.character }, removed: before.removed, inserted: edit.text, time: Date.now() });
     }
     clearTimeout(this.timer);
     if (!doc) Object.assign(target, await this.loadSide(src));

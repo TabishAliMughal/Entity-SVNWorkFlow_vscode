@@ -81,35 +81,3 @@ export function hunkSpans(rows: readonly Row[]): HunkSpan[] {
   });
   return out;
 }
-
-/** Top (px, in content coordinates) of a button of height `btnH` centred on the hunk's rows. */
-export function arrowTop(span: Pick<HunkSpan, 'first' | 'count'>, rowH: number, btnH: number): number {
-  return (span.first + span.count / 2) * rowH - btnH / 2;
-}
-
-/**
- * Remaps rows after lines `from..to` (inclusive, on `side`) were replaced by `newCount` lines:
- * later lines shift, surplus lines become fillers, extra new lines get their own rows (no counterpart).
- */
-export function shiftRows(rows: readonly Row[], side: 'left' | 'right', from: number, to: number, newCount: number): Row[] {
-  const other = side === 'left' ? 'right' : 'left';
-  const oldCount = to - from + 1;
-  const delta = newCount - oldCount;
-  const out: Row[] = [];
-  for (const r of rows) {
-    const idx = r[side];
-    if (idx < from) {
-      out.push(r);
-    } else if (idx <= to) {
-      const keep = idx - from < newCount;
-      if (keep) out.push(r);
-      else if (r[other] >= 0) out.push({ ...r, [side]: -1 });
-      if (idx === to) {
-        for (let j = oldCount; j < newCount; j++) out.push({ left: -1, right: -1, kind: 'equal', hunk: -1, first: false, [side]: from + j });
-      }
-    } else {
-      out.push({ ...r, [side]: idx + delta });
-    }
-  }
-  return out;
-}

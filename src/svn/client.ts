@@ -219,10 +219,11 @@ export class SvnClient {
   /** svn status --xml; showUpdates adds --show-updates (contacts the server). */
   async status(
     target: string,
-    opts: SvnRunOptions & { showUpdates?: boolean } = {},
+    opts: SvnRunOptions & { showUpdates?: boolean; noIgnore?: boolean } = {},
   ): Promise<{ entries: StatusEntry[]; youngest?: number }> {
     const args = ['status'];
     if (opts.showUpdates) args.push('--show-updates');
+    if (opts.noIgnore) args.push('--no-ignore');
     args.push('--', pegSafe(target));
     const r = await this.run(args, { ...opts, xml: true });
     return parseStatus(r.text);

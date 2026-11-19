@@ -16,6 +16,7 @@ import { confirmCertificateTrust } from '../util/trustUi';
 import { acquireRepoLocks } from '../wc/lock';
 import { DEPTH_CHOICES, SetDepth, copyName, defaultFolderName, planRevert, rebaseUrl, resolveSvnUrl, parseRevisionInput, revertable, validateRelativeName } from '../wc/model';
 import * as ops from '../wc/ops';
+import { skipLocalIgnoredRevert } from '../localignore/model';
 import { joinSvnUrl } from '../util/svnUrl';
 import { WcCtx } from '../wc/ops';
 
@@ -152,9 +153,9 @@ export function registerWcCommands(context: vscode.ExtensionContext, services: S
         const c = ctx(g.repo);
         const byPath = new Map<string, ops.WcStatusItem['entry']>();
         for (const p of g.paths) for (const e of revertable(await ops.statusEntries(c, p))) byPath.set(normalizePath(e.path), e);
-        const cands = [...byPath.values()].map((e) => ({ path: e.path, item: e.item, props: e.props, isDir: isoDir(e.path) || e.item === 'missing' }));
+        const cands = skipLocalIgnoredRevert([...byPath.values()].map((e) => ({ path: e.path, item: e.item, props: e.props, isDir: isoDir(e.path) || e.item === 'missing' })), services.localIgnore.paths());
         if (!cands.length) {
-          void vscode.window.showInformationMessage(`SVN: nothing to revert in ${g.paths.map((p) => rel(g.repo, p)).join(', ')} (${g.repo.name}).`);
+          void vscode.window.showInformationMessage(`SVN: nothing to revert in ${g.paths.map((p) => rel(g.repo, p)).join(', ')} (${g.repo.name}); locally ignored files are never reverted.`);
           continue;
         }
         const describe = (e: { item: string; props?: string }): string => (e.props && e.props !== 'none' && e.props !== 'normal' ? `${e.item}, props ${e.props}` : e.item);

@@ -45,6 +45,9 @@ async function main() {
       logLevel: 'info',
       entryPoints: ['src/compare/webview/main.ts'],
       outfile: 'dist/compare/webview.js',
+      // Monaco ships its CSS and the codicon font; the font is emitted next to webview.css and referenced relatively.
+      loader: { '.ttf': 'file' },
+      assetNames: '[name]',
     });
     configs.push({
       bundle: true,

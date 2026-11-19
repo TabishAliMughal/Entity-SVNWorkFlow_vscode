@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { diffLines } from '../../src/diff';
 import { classifyHunks, rangesOverlap } from '../../src/compare/classify';
-import { hunkAtY, rowAtY, rulerMarkers, viewportThumb } from '../../src/compare/ruler';
 
 const L = (...l: string[]): string => l.join('\n') + '\n';
 const classes = (base: string, local: string, incoming: string): string[] => classifyHunks(base, local, incoming, diffLines(local, incoming).hunks);
@@ -63,39 +62,12 @@ describe('classifyHunks (BASE as common ancestor)', () => {
   });
 });
 
-describe('overview ruler mapping', () => {
-  const spans = [{ hunk: 0, first: 10, count: 5 }, { hunk: 1, first: 90, count: 10 }];
-  it('scales positions to the ruler height with a minimum marker size', () => {
-    const m = rulerMarkers(spans, 100, 200);
-    expect(m[0]).toEqual({ hunk: 0, top: 20, height: 10 });
-    expect(m[1].top).toBe(180);
-    expect(rulerMarkers([{ hunk: 0, first: 1, count: 1 }], 10000, 100)[0].height).toBe(3);
-    expect(rulerMarkers([{ hunk: 0, first: 9999, count: 1 }], 10000, 100)[0].top).toBe(97);
-    expect(rulerMarkers(spans, 0, 100)).toEqual([]);
-  });
-  it('maps y to a row and finds the nearest marker', () => {
-    expect(rowAtY(100, 100, 200)).toBe(50);
-    expect(rowAtY(-5, 100, 200)).toBe(0);
-    expect(rowAtY(9999, 100, 200)).toBe(99);
-    const m = rulerMarkers(spans, 100, 200);
-    expect(hunkAtY(m, 25)).toBe(0);
-    expect(hunkAtY(m, 33)).toBe(0);
-    expect(hunkAtY(m, 100)).toBeUndefined();
-    expect(hunkAtY(m, 178)).toBe(1);
-  });
-  it('shows the visible window as a thumb', () => {
-    expect(viewportThumb(500, 250, 1000, 200)).toEqual({ top: 100, height: 50 });
-    expect(viewportThumb(0, 100, 0, 200)).toEqual({ top: 0, height: 200 });
-  });
-});
-
 describe('class colours', () => {
   const read = (f: string): string => readFileSync(join(__dirname, '../..', f), 'utf8');
   it('incoming-only is the default blue with a "Safe to pull" tooltip; outgoing and mixed are grey', () => {
     const css = read('media/compare/compare.css');
     expect(read('src/compare/webview/main.ts')).toContain("incoming: 'Safe to pull'");
-    expect(css).not.toMatch(/\.conn\.k-in path/);
-    expect(css).toMatch(/\.conn\.k-out path, \.conn\.k-mx path/);
-    expect(css).toMatch(/\.ruler \.k-in \{ background: var\(--vscode-button-background/);
+    expect(css).not.toMatch(/.conn.k-in path/);
+    expect(css).toMatch(/.conn.k-out path, .conn.k-mx path/);
   });
 });

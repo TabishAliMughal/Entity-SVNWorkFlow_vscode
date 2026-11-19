@@ -74,9 +74,11 @@ export function buildItems(repoName: string, entries: readonly StatusEntry[], re
   const add = (abs: string, e: { item: string; props: string; treeConflicted?: boolean; revision?: number; changelist?: string; lock?: LockInfo; repoLock?: LockInfo }): void => {
     const key = pathKey(abs, o);
     const r = remote.get(key);
-    const outgoing = isOutgoingStatus(e.item, e.props, e.treeConflicted);
-    const incoming = isIncomingStatus(r?.repoItem, r?.repoProps);
-    if (!outgoing && !incoming) return;
+    // `ignored` (svn:ignore, only with --no-ignore) is display-only: neither outgoing nor incoming, so never counted or committed.
+    const shown = e.item === 'ignored';
+    const outgoing = !shown && isOutgoingStatus(e.item, e.props, e.treeConflicted);
+    const incoming = !shown && isIncomingStatus(r?.repoItem, r?.repoProps);
+    if (!outgoing && !incoming && !shown) return;
     byKey.set(key, { repoName, path: abs, item: e.item, props: e.props, treeConflicted: e.treeConflicted, revision: e.revision, repoItem: r?.repoItem, repoProps: r?.repoProps, outgoing, incoming, changelist: e.changelist, lock: e.lock, repoLock: e.repoLock });
   };
   for (const e of entries) add(resolveAbs(e.path), e);

@@ -12,9 +12,10 @@ export interface WebviewPage {
 
 const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-/** Strict CSP: no inline script/style, scripts only with the nonce, styles only from the extension, no network. */
-export function contentSecurityPolicy(cspSource: string, nonce: string): string {
-  return `default-src 'none'; style-src ${cspSource}; script-src 'nonce-${nonce}'; img-src ${cspSource} data:; font-src ${cspSource}; base-uri 'none'; form-action 'none';`;
+/** Strict CSP: no inline script, scripts only with the nonce, no network. Styles only from the extension unless `inlineStyles` (Monaco injects <style> rules at runtime). */
+export function contentSecurityPolicy(cspSource: string, nonce: string, opts: { inlineStyles?: boolean } = {}): string {
+  const style = opts.inlineStyles ? `${cspSource} 'unsafe-inline'` : cspSource;
+  return `default-src 'none'; style-src ${style}; script-src 'nonce-${nonce}'; img-src ${cspSource} data:; font-src ${cspSource}; base-uri 'none'; form-action 'none';`;
 }
 
 export function webviewHtml(p: WebviewPage): string {

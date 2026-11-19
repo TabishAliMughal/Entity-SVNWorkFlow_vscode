@@ -1,12 +1,23 @@
 import type { DiffBlock, Hunk, IgnoreWhitespace } from '../diff';
-import type { Pos } from './editing';
 import type { CompactBlame, SideMeta } from './annotate';
 import type { HunkClass } from './classify';
+
+/** 0-based line and UTF-16 column. */
+export interface Pos {
+  line: number;
+  col: number;
+}
+
+export interface TextEdit {
+  start: Pos;
+  end: Pos;
+  text: string;
+}
 
 export interface SideInfo {
   name: string;
   label: string;
-  /** highlight.js language id. */
+  /** Monaco language id. */
   lang?: string;
   /** Present only when the text changed since the last message of this panel. */
   lines?: string[];
@@ -46,10 +57,8 @@ export interface DataMessage {
   typing: boolean;
   /** Shown instead of the generic "identical" text after the file was brought up to date. */
   upToDate?: string;
-  /** Last edit/undo/redo sequence number processed; the view ignores data older than what it sent. */
+  /** Last edit sequence number processed; the view ignores data older than what it sent. */
   ackSeq: number;
-  /** Caret to set (after undo/redo). */
-  caret?: Pos;
   busy?: boolean;
 }
 
@@ -61,9 +70,8 @@ export type FromWebview =
   | { type: 'pullAll'; version: number }
   | { type: 'options'; ignoreWhitespace: IgnoreWhitespace; ignoreEol: boolean; ignoreCase: boolean }
   | { type: 'openAt'; side: 'left' | 'right'; line: number }
-  | { type: 'edit'; seq: number; start: Pos; end: Pos; text: string }
-  | { type: 'undo'; seq: number }
-  | { type: 'redo'; seq: number }
+  /** Edits of one Monaco change event, all in the coordinates of the text before it. */
+  | { type: 'edit'; seq: number; edits: TextEdit[] }
   | { type: 'save' }
   | { type: 'pickRevision' }
   | { type: 'refresh' };

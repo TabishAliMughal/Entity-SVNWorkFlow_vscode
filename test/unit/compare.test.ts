@@ -4,7 +4,7 @@ import { decodeContent, hasNulBytes, isBinaryMime } from '../../src/compare/cont
 import { buildRows, hunkRowStarts } from '../../src/compare/rows';
 import { markWords, splitHighlighted } from '../../src/compare/lineHtml';
 import { applyAllHunks, minimalEdit } from '../../src/compare/pull';
-import { languageFor } from '../../src/compare/langs';
+import { languageFor, monacoLanguageFor } from '../../src/compare/langs';
 import { pickEditable, sourceName } from '../../src/compare/sources';
 
 const b = (...n: number[]): Uint8Array => Uint8Array.from(n);
@@ -129,6 +129,12 @@ describe('misc', () => {
     expect(languageFor('a.PHP')).toBe('php');
     expect(languageFor('x.html')).toBe('xml');
     expect(languageFor('Makefile')).toBeUndefined();
+    expect(monacoLanguageFor('x.html')).toBe('html');
+    expect(monacoLanguageFor('x.xml')).toBe('xml');
+    expect(monacoLanguageFor('run.sh')).toBe('shell');
+    expect(monacoLanguageFor('a.json')).toBe('json');
+    expect(monacoLanguageFor('x.patch')).toBeUndefined();
+    expect(monacoLanguageFor('Makefile')).toBeUndefined();
   });
   it('names sources and picks the editable side', () => {
     expect(sourceName({ kind: 'local', fsPath: 'C:\\wc\\src\\a.php' })).toBe('a.php');

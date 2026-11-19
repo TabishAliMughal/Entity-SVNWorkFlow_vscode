@@ -3,16 +3,18 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ChangelistNode } from '../changelist/nodes';
 import { groupByChangelist } from '../changelist/model';
+import { formatCommitDate } from '../incoming/authors';
 import { ChangeItem } from '../incoming/model';
 import { RepoEntry } from '../repos/model';
 import { lockCache } from '../locks/cache';
 import { describeLock } from '../locks/model';
 import { Services } from '../services';
 import { conflictArtifacts, conflictFlags, conflictKinds, conflictedItems, kindsLabel } from '../conflict/model';
-import { ConflictsNode, FolderNode, ItemNode, MessageNode, PaneNode, RepoNode } from './nodes';
+import { ConflictsNode, FolderNode, ItemNode, LocalIgnoreNode, MessageNode, PaneNode, RepoNode } from './nodes';
+import { isSameOrUnder } from '../incoming/model';
 import { TreeEntry, ViewMode, buildTree } from './tree';
-import { iconFile, paneIcon } from './icons';
-import { FILTER_TITLES, PaneFilter, buildLabel, contextValueFor, filterItems, relativeDescription, statusText } from './model';
+import { iconFile, isDisplayOnly, paneIcon } from './icons';
+import { DEFAULT_VISIBILITY, FILTER_TITLES, folderContextValue, PaneFilter, PaneVisibility, buildLabel, contextValueFor, filterItems, relativeDescription, statusText } from './model';
 
 export class ChangesProvider implements vscode.TreeDataProvider<PaneNode> {
   private readonly emitter = new vscode.EventEmitter<PaneNode | undefined>();
@@ -25,7 +27,17 @@ export class ChangesProvider implements vscode.TreeDataProvider<PaneNode> {
     private filter: PaneFilter,
     private mode: ViewMode = 'tree',
     private readonly extensionUri?: vscode.Uri,
+    private visibility: PaneVisibility = DEFAULT_VISIBILITY,
   ) {}
+
+  setVisibility(v: PaneVisibility): void {
+    this.visibility = v;
+    this.refresh();
+  }
+
+  getVisibility(): PaneVisibility {
+    return this.visibility;
+  }
 
   setViewMode(m: ViewMode): void {
     this.mode = m;
@@ -64,6 +76,7 @@ export class ChangesProvider implements vscode.TreeDataProvider<PaneNode> {
     if (node instanceof RepoNode) return this.repoChildren(node);
     if (node instanceof FolderNode) return this.entryNodes(node.repo, node.children);
     if (node instanceof ChangelistNode || node instanceof ConflictsNode) return this.itemNodes(node.repo, node.items);
+    if (node instanceof LocalIgnoreNode) return this.itemNodes(node.repo, node.items, true);
     return [];
   }
 
@@ -72,13 +85,23 @@ export class ChangesProvider implements vscode.TreeDataProvider<PaneNode> {
     return this.services.incoming.scopeOf(repo)[0] ?? repo.localFolder;
   }
 
-  private itemNodes(repo: RepoEntry, items: ChangeItem[]): PaneNode[] {
-    if (this.mode === 'list') return items.map((i) => new ItemNode(repo, i));
+  private itemNodes(repo: RepoEntry, items: ChangeItem[], local = false): PaneNode[] {
+    if (this.mode === 'list' || local) return items.map((i) => new ItemNode(repo, i, local));
     return this.entryNodes(repo, buildTree(items, this.rootOf(repo)));
   }
 
   private entryNodes(repo: RepoEntry, entries: TreeEntry[]): PaneNode[] {
     return entries.map((e) => (e.kind === 'item' ? new ItemNode(repo, e.item) : new FolderNode(repo, e.name, e.path, e.items, e.children)));
+  }
+
+  /** Listed paths of this working copy; shows the changed item when there is one, else a placeholder so the entry can still be removed. */
+  private localIgnoreItems(repo: RepoEntry, ignored: ChangeItem[]): ChangeItem[] {
+    const root = this.rootOf(repo);
+    return this.services.localIgnore
+      .paths()
+      .filter((p) => isSameOrUnder(p, root))
+      .map((p) => ignored.find((i) => i.path.toLowerCase() === p.toLowerCase()) ?? { repoName: repo.name, path: p, item: 'normal', props: 'none', outgoing: false, incoming: false })
+      .sort((a, b) => a.path.localeCompare(b.path, undefined, { sensitivity: 'base' }));
   }
 
   private repoChildren(node: RepoNode): PaneNode[] {
@@ -87,16 +110,18 @@ export class ChangesProvider implements vscode.TreeDataProvider<PaneNode> {
     if (!state) return [new MessageNode('Checking...', 'loading~spin')];
     const conflicts = conflictedItems(state.items).sort((a, b) => relativeDescription(a.path, this.rootOf(node.repo)).localeCompare(relativeDescription(b.path, this.rootOf(node.repo)), undefined, { sensitivity: 'base' }));
     const artifacts = conflictArtifacts(state.items);
-    const items = filterItems(state.items.filter((i) => !artifacts.has(i) && !conflicts.includes(i)), this.filter).sort((a, b) => relativeDescription(a.path, this.rootOf(node.repo)).localeCompare(relativeDescription(b.path, this.rootOf(node.repo)), undefined, { sensitivity: 'base' }));
+    const items = filterItems(state.items.filter((i) => !artifacts.has(i) && !conflicts.includes(i)), this.filter, this.visibility).sort((a, b) => relativeDescription(a.path, this.rootOf(node.repo)).localeCompare(relativeDescription(b.path, this.rootOf(node.repo)), undefined, { sensitivity: 'base' }));
     this.prefetchAuthors(node, items, state.youngest);
     const out: PaneNode[] = [];
     if (state.error) out.push(new MessageNode(`Could not check server: ${state.error.kind}`, 'warning', state.error.message));
     if (conflicts.length) out.push(new ConflictsNode(node.repo, conflicts));
     if (!items.length && !conflicts.length && !state.error) out.push(new MessageNode(`No ${FILTER_TITLES[this.filter].toLowerCase()} changes`, 'check'));
     // Changelists present: a default "Changes" group plus one group per changelist; otherwise the list stays flat.
+    const listed = this.localIgnoreItems(node.repo, state.ignored);
+    const tail = listed.length ? [new LocalIgnoreNode(node.repo, listed)] : [];
     const groups = groupByChangelist(items, true);
-    if (groups.length) return out.concat(groups.map((g) => new ChangelistNode(node.repo, g.title, g.changelist, g.items)));
-    return out.concat(this.itemNodes(node.repo, items));
+    if (groups.length) return out.concat(groups.map((g) => new ChangelistNode(node.repo, g.title, g.changelist, g.items)), tail);
+    return out.concat(this.itemNodes(node.repo, items), tail);
   }
 
   private prefetchAuthors(node: RepoNode, items: ChangeItem[], youngest: number | undefined): void {
@@ -126,6 +151,7 @@ export class ChangesProvider implements vscode.TreeDataProvider<PaneNode> {
     if (node instanceof RepoNode) return this.repoItem(node);
     if (node instanceof ChangelistNode) return this.groupItem(node);
     if (node instanceof ConflictsNode) return this.conflictsGroup(node);
+    if (node instanceof LocalIgnoreNode) return this.localIgnoreGroup(node);
     if (node instanceof FolderNode) return this.folderItem(node);
     return this.changeItem(node);
   }
@@ -160,13 +186,23 @@ export class ChangesProvider implements vscode.TreeDataProvider<PaneNode> {
     return t;
   }
 
+  private localIgnoreGroup(node: LocalIgnoreNode): vscode.TreeItem {
+    const t = new vscode.TreeItem('Local Ignore List', vscode.TreeItemCollapsibleState.Expanded);
+    t.id = `svnLocalIgnore:${node.repo.name}`;
+    t.description = `${node.items.length}`;
+    t.iconPath = new vscode.ThemeIcon('eye-closed');
+    t.contextValue = 'svnLocalIgnoreGroup';
+    t.tooltip = 'Kept on this machine only (never svn:ignore, never committed). These files are skipped by Commit, Update and every bulk action.';
+    return t;
+  }
+
   private folderItem(node: FolderNode): vscode.TreeItem {
     const t = new vscode.TreeItem(node.name, vscode.TreeItemCollapsibleState.Expanded);
     t.id = `svnFolder:${node.repo.name}:${node.path}`;
     t.iconPath = vscode.ThemeIcon.Folder;
     t.resourceUri = vscode.Uri.file(node.path);
     t.description = `${node.items.length}`;
-    t.contextValue = 'svnFolder';
+    t.contextValue = folderContextValue(node.items);
     t.tooltip = `${node.path}
 ${node.items.length} change${node.items.length === 1 ? '' : 's'}`;
     return t;
@@ -185,11 +221,15 @@ ${node.items.length} change${node.items.length === 1 ? '' : 's'}`;
   private changeItem(node: ItemNode): vscode.TreeItem {
     const { item, repo } = node;
     const youngest = this.services.incoming.getState(repo.name)?.youngest;
-    const author = this.services.authors.get(item, youngest);
+    const stamp = this.services.authors.getStamp(item, youngest);
+    const author = stamp?.author;
+    const date = formatCommitDate(stamp?.date);
     const name = path.basename(item.path);
     const t = new vscode.TreeItem(buildLabel(name, author));
     const icon = paneIcon(item);
-    t.iconPath = this.extensionUri
+    t.iconPath = isDisplayOnly(item)
+      ? new vscode.ThemeIcon('eye-closed', new vscode.ThemeColor('disabledForeground'))
+      : this.extensionUri
       ? { light: vscode.Uri.joinPath(this.extensionUri, iconFile(icon, 'light')), dark: vscode.Uri.joinPath(this.extensionUri, iconFile(icon, 'dark')) }
       : new vscode.ThemeIcon('circle-outline');
     const dir = this.mode === 'list' ? relativeDescription(path.dirname(item.path), this.rootOf(repo)) : '';
@@ -201,19 +241,21 @@ ${node.items.length} change${node.items.length === 1 ? '' : 's'}`;
     } catch {
       /* missing or remote-only */
     }
-    t.contextValue = [contextValueFor(item, isDir), ...conflictFlags(item)].join(' ');
+    t.contextValue = node.local ? `svnLocalIgnored ${isDir ? 'dir' : 'file'}` : [contextValueFor(item, isDir), ...conflictFlags(item)].join(' ');
     const kinds = conflictKinds(item);
     if (kinds.length) t.description = `${t.description ? `${t.description} ` : ''}(${kindsLabel(kinds)} conflict)`;
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`**${name}**\n\n\`${item.path}\`\n\n${statusText(item)}`);
-    if (author) md.appendMarkdown(`\n\nLast committer: ${author}`);
+    if (author) md.appendMarkdown(`\n\nLast committer: ${author}${date ? ` (${date})` : ''}`);
     if (item.revision !== undefined) md.appendMarkdown(`\n\nBASE r${item.revision}`);
     if (item.changelist) md.appendMarkdown(`\n\nChangelist: ${item.changelist}`);
     const lock = lockCache.get(repo.name, item.path);
     if (lock.state !== 'none') md.appendMarkdown(`\n\n$(lock) ${describeLock(lock)}`);
     md.appendMarkdown(`\n\nRepository: ${repo.name}`);
     t.tooltip = md;
-    t.command = kinds.length
+    t.command = node.local
+      ? { command: 'svnWorkflow.pane.openFile', title: 'Open File', arguments: [node] }
+      : kinds.length
       ? { command: 'svnWorkflow.conflict.resolve', title: 'Resolve Conflict', arguments: [node] }
       : { command: 'svnWorkflow.pane.openDiff', title: 'Open Diff', arguments: [node] };
     return t;

@@ -2,6 +2,8 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { fetchContent } from '../compare/fetch';
 import { buildPatch, collectChanges, planEntry, posixRel, type PatchEntry } from '../patch/create';
+import { isSameOrUnder } from '../incoming/model';
+import { assertNoLocalIgnored, currentLocalIgnoreList, isLocalIgnored } from '../localignore/model';
 import { runPatch } from '../patch/ops';
 import { applyFilePatch, parseUnifiedDiff, PatchApplyError } from '../patch/parse';
 import type { RepoEntry } from '../repos/model';
@@ -99,10 +101,22 @@ export interface ShelveResult {
   notes: string[];
 }
 
+/** Drops ignored targets; a folder that holds listed paths becomes its individual changed files. */
+async function skipLocalIgnored(c: ShelfCtx, paths: readonly string[]): Promise<string[]> {
+  const list = currentLocalIgnoreList();
+  const kept = paths.filter((p) => !isLocalIgnored(p, list));
+  if (!list.some((l) => kept.some((p) => isSameOrUnder(l, p)))) return kept;
+  // shortcut: folder property changes are not shelved in this expanded case; collectChanges drops ignored files.
+  return (await collectChanges(c.client, c.repo, kept, c.signal)).filter((e) => !e.isDir && e.item !== 'unversioned').map((e) => e.path);
+}
+
 export async function shelve(c: ShelfCtx, input: ShelveInput): Promise<ShelveResult> {
   const bad = validateShelfName(input.name);
   if (bad) throw new Error(bad);
   if (await nameTaken(c, input.name)) throw new Error(`A shelf named "${input.name}" already exists.`);
+  const paths = await skipLocalIgnored(c, input.paths);
+  if (!paths.length) throw new Error('Nothing to shelve: everything selected is on the Local Ignore List.');
+  input = { ...input, paths };
   const probe = c.mode === 'patch' ? ({} as Probe) : await probeNative(c);
   const backend = resolveBackend(c.mode, !!probe.env);
   const notes: string[] = [];
@@ -164,6 +178,7 @@ async function patchShelve(c: ShelfCtx, input: ShelveInput): Promise<ShelveResul
   const meta: ShelfMeta = { format: 1, name: input.name, message: input.message, createdAt: new Date().toISOString(), repoName: repo.name, files };
   await c.store.write(meta, built.bytes, binaries);
 
+  assertNoLocalIgnored(chosen.map((e) => e.path));
   // Everything is stored; now take the changes out of the working copy.
   await withTargetArgs(c.tmpDir, chosen.map((e) => pegSafe(e.path)), (tail) => client.run(['revert', ...tail], { repoName: repo.name, cwd: repo.localFolder, signal: c.signal }));
   for (const e of chosen) {

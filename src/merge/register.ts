@@ -8,6 +8,7 @@ import { encodeRepoPath } from '../history/model';
 import type { SvnTarget } from '../pane/commands';
 import type { RepoEntry } from '../repos/model';
 import type { Services } from '../services';
+import { localIgnoredAround } from '../localignore/model';
 import { notifySuccess, notifyWarning, runOperation } from '../util/notify';
 import { folderOf, registerRepoCommand, withRepoLock } from '../util/repoCommand';
 import { ACCEPT_POLICIES, AcceptPolicy, MergeChange, MergeKind, MergeSpec, mergeTitle, parseRevSpec, summarizeMerge, compressRevs } from './model';
@@ -194,6 +195,15 @@ async function pickRevisions(env: MergeEnv, c: { client: Services['client']; rep
 export async function executeMerge(env: MergeEnv, t: WcTarget, spec: MergeSpec): Promise<boolean> {
   const { services } = env;
   const { repo } = t;
+  const listed = localIgnoredAround([t.fsPath]);
+  if (listed.length) {
+    const ok = await vscode.window.showWarningMessage(
+      `${listed.length} locally ignored path(s) lie inside the merge target.`,
+      { modal: true, detail: `A merge cannot skip files, so it may change them:\n${listed.slice(0, 8).map((p) => relOf(repo, p)).join('\n')}${listed.length > 8 ? '\n...' : ''}` },
+      'Merge Anyway',
+    );
+    if (ok !== 'Merge Anyway') return false;
+  }
   const local = await localChangeCount({ client: services.client, repo, cwd: t.cwd }, t.arg).catch(() => 0);
   if (local > 0 || spec.kind === 'reintegrate') {
     const detail =

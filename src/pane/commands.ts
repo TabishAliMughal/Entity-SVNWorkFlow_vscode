@@ -31,7 +31,8 @@ export function collectTargets(services: Services, arg?: unknown, selection?: un
     for (const n of nodes) {
       if (isItemNode(n)) out.push({ repo: n.repo, fsPath: n.item.path, item: n.item });
       else if (isRepoNode(n)) out.push({ repo: n.repo, fsPath: services.incoming.scopeOf(n.repo)[0] ?? n.repo.localFolder, wholeRepo: true });
-      else if (isChangelistNode(n) || n instanceof FolderNode) for (const i of n.items) out.push({ repo: n.repo, fsPath: i.path, item: i });
+      else if (n instanceof FolderNode) out.push({ repo: n.repo, fsPath: n.path });
+      else if (isChangelistNode(n)) for (const i of n.items) out.push({ repo: n.repo, fsPath: i.path, item: i });
     }
     return out;
   }

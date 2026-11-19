@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { isSameOrUnder } from '../incoming/model';
+import { expandUpdatePaths } from '../localignore/model';
 import { requireIncoming } from '../incoming/guard';
 import { escapeGlob, extensionPattern, globMatches } from '../ops/ignore';
 import { AddDepth, addIgnore, addPaths, deleteKeepLocal, isUnversioned, overrideUpdate, readIgnore, removeIgnorePatterns, updatePaths } from '../ops/svnOps';
@@ -238,7 +239,12 @@ export function registerWorkflowCommands(context: vscode.ExtensionContext, servi
       const count = services.incoming.getState(t.repo.name)?.items.filter((i) => i.incoming).length ?? 0;
       if (!(await confirmBulk('update', t.repo.name, t.fsPath, count))) return;
     }
-    const groups = [...groupPathsByRepo(targets).values()];
+    const ignoreList = services.localIgnore.paths();
+    const groups = [...groupPathsByRepo(targets).values()].map((g) => ({ ...g, paths: expandUpdatePaths(g.paths, services.incoming.getState(g.repo.name)?.items ?? [], ignoreList) })).filter((g) => g.paths.length);
+    if (!groups.length) {
+      void vscode.window.showInformationMessage('SVN: nothing to update (the only incoming changes are on the Local Ignore List).');
+      return;
+    }
     const results = await withRepoLocks(groups.map((g) => g.repo.name), () => runOperation('Updating', async (signal, step) => {
       const out: { repo: RepoEntry; revision?: number; conflicts: string[] }[] = [];
       for (const g of groups) {

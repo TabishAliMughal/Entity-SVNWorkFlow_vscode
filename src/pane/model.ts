@@ -14,8 +14,26 @@ export function matchesFilter(item: Pick<ChangeItem, 'outgoing' | 'incoming'>, f
   return item.outgoing || item.incoming;
 }
 
-export function filterItems<T extends Pick<ChangeItem, 'outgoing' | 'incoming'>>(items: readonly T[], filter: PaneFilter): T[] {
-  return items.filter((i) => matchesFilter(i, filter));
+/** Show/hide toggles of the pane's filter menu; kept per workspace. */
+export interface PaneVisibility {
+  unversioned: boolean;
+  ignored: boolean;
+}
+
+export const DEFAULT_VISIBILITY: PaneVisibility = { unversioned: true, ignored: false };
+
+export function parseVisibility(v: unknown): PaneVisibility {
+  const o = (v && typeof v === 'object' ? v : {}) as Partial<PaneVisibility>;
+  return { unversioned: typeof o.unversioned === 'boolean' ? o.unversioned : DEFAULT_VISIBILITY.unversioned, ignored: typeof o.ignored === 'boolean' ? o.ignored : DEFAULT_VISIBILITY.ignored };
+}
+
+/** svn:ignore'd items are neither outgoing nor incoming, so they bypass the direction filter and only obey the toggle. */
+export function filterItems<T extends Pick<ChangeItem, 'outgoing' | 'incoming'> & { item?: string }>(items: readonly T[], filter: PaneFilter, vis: PaneVisibility = DEFAULT_VISIBILITY): T[] {
+  return items.filter((i) => {
+    if (i.item === 'ignored') return vis.ignored;
+    if (i.item === 'unversioned' && !vis.unversioned) return false;
+    return matchesFilter(i, filter);
+  });
 }
 
 /** `<filename> (<last committer>)`, or just the filename while the author is unknown. */
@@ -30,6 +48,7 @@ export function relativeDescription(itemPath: string, repoRoot: string): string 
 
 /** Status shown in the tooltip; a local change wins over an incoming-only item. */
 export function statusText(i: Pick<ChangeItem, 'item' | 'props' | 'repoItem' | 'repoProps' | 'outgoing' | 'incoming'>): string {
+  if (i.item === 'ignored') return 'Ignored (svn:ignore)';
   const parts: string[] = [];
   if (i.outgoing) parts.push(i.item !== 'normal' ? `Local: ${i.item}` : `Local: properties ${i.props}`);
   if (i.incoming) parts.push(`Incoming: ${i.repoItem && i.repoItem !== 'none' ? i.repoItem : `properties ${i.repoProps}`}`);
@@ -77,3 +96,12 @@ export function contextValueFor(i: Pick<ChangeItem, 'item' | 'outgoing' | 'incom
 }
 
 export const FILTER_TITLES: Record<PaneFilter, string> = { outgoing: 'Outgoing', incoming: 'Incoming', all: 'All' };
+
+/** contextValue of a tree-mode folder node: `svnFolder` plus flags summarising the changes beneath it. */
+export function folderContextValue(items: ReadonlyArray<Pick<ChangeItem, 'item' | 'outgoing' | 'incoming'>>): string {
+  const flags = ['svnFolder'];
+  if (items.some((i) => i.outgoing)) flags.push('outgoing');
+  if (items.some((i) => i.incoming)) flags.push('incoming');
+  if (items.length && items.every((i) => i.item === 'unversioned')) flags.push('unversioned');
+  return flags.join(' ');
+}

@@ -10,6 +10,8 @@ import { SvnLocator } from './svn/locator';
 import { LineLogger, Logger } from './util/logger';
 import { AuthorResolver } from './incoming/authors';
 import { IncomingService } from './incoming/service';
+import { LocalIgnoreStore } from './localignore/store';
+import { isLocalIgnored, setLocalIgnoreSource } from './localignore/model';
 import { focusFolder, pickScope } from './incoming/scope';
 import { repoLocks } from './override/commitLocks';
 import { ExternalsGuard } from './externals/guard';
@@ -33,6 +35,8 @@ export interface Services {
   /** Cached outgoing/incoming state per repo; call `incoming.requestRefresh({ repoName, remote: true })` after SVN operations. */
   incoming: IncomingService;
   authors: AuthorResolver;
+  /** Workspace-local list of files the extension must never commit or update. */
+  localIgnore: LocalIgnoreStore;
   externals: ExternalsGuard;
   certs: CertGuard;
   extensionId: string;
@@ -73,6 +77,10 @@ export function createServices(context: vscode.ExtensionContext): Services {
     return pick?.name === repo.name ? [pick.target] : [];
   };
   const authors = new AuthorResolver(client, logger);
+  const localIgnore = new LocalIgnoreStore(context.workspaceState);
+  setLocalIgnoreSource(() => localIgnore.paths());
+  incoming.isLocalIgnored = (p) => isLocalIgnored(p, localIgnore.paths());
+  context.subscriptions.push(localIgnore.onDidChange(() => incoming.localIgnoreChanged()));
   const externals = new ExternalsGuard({
     client,
     findRepo: (n) => repos.find(n),
@@ -116,5 +124,5 @@ export function createServices(context: vscode.ExtensionContext): Services {
     const found = await discoverRepo(client, currentFocus(), logger);
     if (!repos.setCurrent(found)) incoming.scopeChanged();
   };
-  return { rediscover, output, logger, locator, client, passwords, repos, servers, resolver, incoming, authors, externals, certs, extensionId: context.extension.id, tmpDir: path.join(context.globalStorageUri.fsPath, 'tmp') };
+  return { rediscover, output, logger, locator, client, passwords, repos, servers, resolver, incoming, authors, localIgnore, externals, certs, extensionId: context.extension.id, tmpDir: path.join(context.globalStorageUri.fsPath, 'tmp') };
 }

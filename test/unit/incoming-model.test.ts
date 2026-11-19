@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { aggregateIncoming, buildItems, isIncomingStatus, isOutgoingStatus, isSameOrUnder, remoteMapFrom } from '../../src/incoming/model';
+import { isDisplayOnly } from '../../src/pane/icons';
 import type { StatusEntry } from '../../src/svn/xml';
 
 const W = { platform: 'win32' } as const;
@@ -33,6 +34,13 @@ describe('buildItems', () => {
     expect(by['c.txt']).toMatchObject({ outgoing: true, incoming: true });
     expect(by['d.txt']).toMatchObject({ outgoing: true, incoming: false, item: 'unversioned' });
     expect(by['e.txt']).toBeUndefined();
+  });
+  it('ignored items are display-only: neither outgoing nor incoming, even with props or server changes', () => {
+    const entries = [entry('i.log', 'ignored', 'modified', { props: 'modified' })];
+    const [i] = buildItems('r', entries, remoteMapFrom(entries, abs, W), abs, W);
+    expect(i).toMatchObject({ item: 'ignored', outgoing: false, incoming: false });
+    expect(isDisplayOnly(i)).toBe(true);
+    expect(isDisplayOnly({ outgoing: true, incoming: false })).toBe(false);
   });
   it('keeps remembered incoming items on a local-only refresh', () => {
     const remote = remoteMapFrom([entry('b.txt', 'normal', 'modified', { revision: 3 })], abs, W);

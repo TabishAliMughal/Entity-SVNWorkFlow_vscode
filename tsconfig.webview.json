@@ -1,6 +1,10 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "lib": ["ES2022", "DOM"], "types": [] },
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "paths": { "monaco-editor/*": ["./node_modules/monaco-editor/esm/vs/*"] }
+  },
   "include": ["src/compare/webview", "src/conflict/webview"],
   "exclude": []
 }

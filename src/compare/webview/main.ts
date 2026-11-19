@@ -1,11 +1,8 @@
-import { el, highlight } from './shared';
-import { arrowTop, buildRows, hunkRowStarts, hunkSpans, shiftRows, type HunkSpan, type Row } from '../rows';
-import { markWords, type Range } from '../lineHtml';
-import {
-  applyEditToLines, clampPos, colAtVisual, comparePos, endPosition, leadingWhitespace, reindent, textInRange, visualCol, wordAt, wordLeft, wordRight, type Pos,
-} from '../editing';
-import { hunkAtY, rowAtY, rulerMarkers, viewportThumb, type RulerMarker } from '../ruler';
-import { rowAuthorLabel, sideTitle, type CompactBlame } from '../annotate';
+import { monaco } from './monaco';
+import { el } from './dom';
+import { applyTheme, colorVar, editorFont, mix, THEME, watchTheme } from './theme';
+import { buildRows, hunkRowStarts, hunkSpans, type HunkSpan } from '../rows';
+import { renderedLabel, sectionLabel, showsSectionLabel, sideTitle, type CompactBlame } from '../annotate';
 import type { DataMessage, FromWebview, ToWebview } from '../protocol';
 
 interface VsCodeApi {
@@ -14,82 +11,44 @@ interface VsCodeApi {
 declare function acquireVsCodeApi(): VsCodeApi;
 const vscode = acquireVsCodeApi();
 
-const ROW_H = 20;
-const BUFFER = 20;
+type Side = 'left' | 'right';
+const SIDES: Side[] = ['left', 'right'];
 const GUTTER_W = 48;
 const BTN_W = 26;
 const BTN_H = 18;
-/** Left edge of the text in a row: line-number column (52) plus the text padding (4). */
-const TEXT_X = 56;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-interface SideView {
-  lines: string[];
-  html: string[];
-  lang?: string;
-  words: Map<number, Range[]>;
-  /** `lines` ends with the empty last line of a document that ends with a line break (editable side only). */
-  virtual: boolean;
-}
-
-const sides: { left: SideView; right: SideView } = {
-  left: { lines: [], html: [], words: new Map(), virtual: false },
-  right: { lines: [], html: [], words: new Map(), virtual: false },
-};
-let spans: HunkSpan[] = [];
-/** Blame of revision sides (per line), used to label changed sections with their authors. */
-const blame: { left?: CompactBlame; right?: CompactBlame } = {};
-let markers: RulerMarker[] = [];
-let typing: 'left' | 'right' | null = null;
-let caret: Pos = { line: 0, col: 0 };
-let anchor: Pos | null = null;
-let want = -1;
-let seq = 0;
-let sentSeq = 0;
-let focused = false;
-let composing = false;
-let dragging = false;
-let useTabs = false;
-let maxLen = 1;
-let lineRow: number[] = [];
 let data: DataMessage | undefined;
-let rows: Row[] = [];
+let spans: HunkSpan[] = [];
 let starts: number[] = [];
 let cur = -1;
-let charW = 8;
+let typing: Side | null = null;
+let seq = 0;
+let sentSeq = 0;
+/** True while a remote text (extension -> view) is written into a model, so it is not echoed back as an edit. */
+let applyingRemote = false;
+/** Blame of the incoming (revision) side, used for the section labels. */
+let rightBlame: CompactBlame | undefined;
+const models: Record<Side, monaco.editor.ITextModel | undefined> = { left: undefined, right: undefined };
+const modelKey: Record<Side, string> = { left: '', right: '' };
+const zoneIds: Record<Side, string[]> = { left: [], right: [] };
 
 const app = document.getElementById('app') as HTMLElement;
 const bar = el('div', 'toolbar');
 const banner = el('div', 'banner');
-const main = el('div', 'main');
-const leftHead = el('div', 'head');
-const rightHead = el('div', 'head');
 const heads = el('div', 'heads');
+const leftHead = el('div', 'head');
 const gutterHead = el('div', 'ghead');
-const rulerHead = el('div', 'rhead');
-heads.append(leftHead, gutterHead, rightHead, rulerHead);
-const leftPane = el('div', 'pane');
+const rightHead = el('div', 'head');
+heads.append(leftHead, gutterHead, rightHead);
+const main = el('div', 'main');
+const hosts = { left: el('div', 'ehost'), right: el('div', 'ehost') };
 const gutter = el('div', 'gutter');
-const rightPane = el('div', 'pane');
-const leftBox = el('div', 'box');
-const rightBox = el('div', 'box');
 const gBox = el('div', 'gbox');
-const overlays = { left: el('div', 'overlay'), right: el('div', 'overlay') };
-const ta = el('textarea', 'cap');
-ta.setAttribute('spellcheck', 'false');
-ta.setAttribute('autocomplete', 'off');
-ta.setAttribute('autocapitalize', 'off');
-ta.setAttribute('wrap', 'off');
-ta.setAttribute('aria-label', 'Local file editor');
-leftPane.append(leftBox, overlays.left);
-rightPane.append(rightBox, overlays.right);
 gutter.append(gBox);
-const ruler = el('div', 'ruler');
-const thumb = el('div', 'thumb');
-ruler.append(thumb);
-main.append(leftPane, gutter, rightPane, ruler);
+main.append(hosts.left, gutter, hosts.right);
 const noticeEl = el('div', 'notice');
-app.append(bar, banner, heads, main, noticeEl, ta);
+app.append(bar, banner, heads, main, noticeEl);
 
 const btn = (label: string, title: string, onClick: () => void): HTMLButtonElement => {
   const b = el('button', undefined, label);
@@ -97,8 +56,8 @@ const btn = (label: string, title: string, onClick: () => void): HTMLButtonEleme
   b.addEventListener('click', onClick);
   return b;
 };
-const prevBtn = btn('▲ Prev', 'Previous change', () => goto(-1));
-const nextBtn = btn('▼ Next', 'Next change', () => goto(1));
+const prevBtn = btn('▲ Prev', 'Previous change (Shift+F7)', () => goto(-1));
+const nextBtn = btn('▼ Next', 'Next change (F7)', () => goto(1));
 const counter = el('span', 'counter');
 const pullAllBtn = btn('Pull all', 'Pull every change into the local file', () => data && vscode.postMessage({ type: 'pullAll', version: data.version }));
 const wsSel = el('select');
@@ -116,7 +75,11 @@ const lab = (cb: HTMLInputElement, t: string): HTMLLabelElement => {
   l.append(cb, document.createTextNode(' ' + t));
   return l;
 };
-const openBtn = btn('Open in editor', 'Open the local file in a normal editor at the caret', () => data && vscode.postMessage({ type: 'openAt', side: data.editable ?? 'left', line: caret.line }));
+const openBtn = btn('Open in editor', 'Open the local file in a normal editor at the caret', () => {
+  if (!data) return;
+  const side = data.editable ?? 'left';
+  vscode.postMessage({ type: 'openAt', side, line: (editors[side].getPosition()?.lineNumber ?? 1) - 1 });
+});
 const revBtn = btn('Revision…', 'Compare with another revision', () => vscode.postMessage({ type: 'pickRevision' }));
 const refreshBtn = btn('Refresh', 'Re-read both sides', () => vscode.postMessage({ type: 'refresh' }));
 const busyEl = el('span', 'busy', '');
@@ -127,64 +90,139 @@ caseCb.addEventListener('change', sendOptions);
 eolCb.addEventListener('change', sendOptions);
 bar.append(prevBtn, nextBtn, counter, pullAllBtn, openBtn, wsSel, lab(caseCb, 'Ignore case'), lab(eolCb, 'Ignore EOL'), revBtn, refreshBtn, busyEl);
 
-function wordMap(ranges: { line: number; start: number; end: number }[]): Map<number, Range[]> {
-  const m = new Map<number, Range[]>();
-  for (const r of ranges) {
-    const a = m.get(r.line) ?? [];
-    a.push({ start: r.start, end: r.end });
-    m.set(r.line, a);
+applyTheme();
+
+function editorOptions(side: Side): monaco.editor.IStandaloneEditorConstructionOptions {
+  const f = editorFont();
+  return {
+    model: null,
+    theme: THEME,
+    ...f,
+    readOnly: true,
+    // VS Code's webview host blocks the native Ctrl+V and re-issues execCommand('paste'), which a textarea receives as a paste event but Monaco's EditContext element does not
+    editContext: false,
+    automaticLayout: true,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    smoothScrolling: false,
+    wordWrap: 'off',
+    folding: true,
+    glyphMargin: false,
+    lineNumbersMinChars: 4,
+    renderWhitespace: 'selection',
+    fixedOverflowWidgets: true,
+    stickyScroll: { enabled: false },
+    // features that would need a language-service or editor worker
+    unicodeHighlight: { ambiguousCharacters: false, invisibleCharacters: false, nonBasicASCII: false },
+    links: false,
+    quickSuggestions: false,
+    suggestOnTriggerCharacters: false,
+    wordBasedSuggestions: 'off',
+    parameterHints: { enabled: false },
+    hover: { enabled: 'off' },
+    colorDecorators: false,
+    renderValidationDecorations: 'off',
+    // the right side carries the visible scrollbar and overview ruler; both sides scroll together
+    overviewRulerLanes: side === 'right' ? 3 : 0,
+    overviewRulerBorder: false,
+    hideCursorInOverviewRuler: true,
+    scrollbar: { vertical: side === 'right' ? 'auto' : 'hidden', horizontal: 'visible', useShadows: false, alwaysConsumeMouseWheel: false },
+  };
+}
+
+const editors: Record<Side, monaco.editor.IStandaloneCodeEditor> = {
+  left: monaco.editor.create(hosts.left, editorOptions('left')),
+  right: monaco.editor.create(hosts.right, editorOptions('right')),
+};
+const decorations = { left: editors.left.createDecorationsCollection(), right: editors.right.createDecorationsCollection() };
+
+function lineHeight(): number {
+  return editors.left.getOption(monaco.editor.EditorOption.lineHeight);
+}
+
+function textOf(lines: string[], endsWithEol: boolean): string {
+  return lines.join('\n') + (endsWithEol && lines.length ? '\n' : '');
+}
+
+/** Writes `text` into the model as one minimal edit (keeps cursors, scroll and the undo stack of the editor). */
+function syncModel(model: monaco.editor.ITextModel, text: string): void {
+  const old = model.getValue();
+  if (old === text) return;
+  let p = 0;
+  const max = Math.min(old.length, text.length);
+  while (p < max && old.charCodeAt(p) === text.charCodeAt(p)) p++;
+  let so = old.length;
+  let st = text.length;
+  while (so > p && st > p && old.charCodeAt(so - 1) === text.charCodeAt(st - 1)) {
+    so--;
+    st--;
   }
-  return m;
+  applyingRemote = true;
+  try {
+    model.pushStackElement();
+    model.pushEditOperations([], [{ range: monaco.Range.fromPositions(model.getPositionAt(p), model.getPositionAt(so)), text: text.slice(p, st) }], () => null);
+    model.pushStackElement();
+  } finally {
+    applyingRemote = false;
+  }
+}
+
+function setModel(side: Side, name: string, lang: string | undefined, text: string): void {
+  const key = `${name}|${lang ?? ''}`;
+  if (models[side] && modelKey[side] === key) {
+    syncModel(models[side] as monaco.editor.ITextModel, text);
+    return;
+  }
+  const old = models[side];
+  const m = monaco.editor.createModel(text, lang ?? 'plaintext');
+  m.setEOL(monaco.editor.EndOfLineSequence.LF);
+  m.onDidChangeContent((e) => {
+    if (applyingRemote || typing !== side) return;
+    seq++;
+    sentSeq = seq;
+    // Monaco reports the changes of one event in the coordinates of the text before it (last change first)
+    vscode.postMessage({
+      type: 'edit',
+      seq,
+      edits: e.changes.map((c) => ({
+        start: { line: c.range.startLineNumber - 1, col: c.range.startColumn - 1 },
+        end: { line: c.range.endLineNumber - 1, col: c.range.endColumn - 1 },
+        text: c.text,
+      })),
+    });
+  });
+  models[side] = m;
+  modelKey[side] = key;
+  editors[side].setModel(m);
+  old?.dispose();
+}
+
+for (const side of SIDES) {
+  editors[side].addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+    if (typing) vscode.postMessage({ type: 'save' });
+  });
 }
 
 function applyData(d: DataMessage): void {
   data = d;
   typing = d.typing ? d.editable : null;
-  for (const w of ['left', 'right'] as const) {
-    const s = sides[w];
+  for (const w of SIDES) {
     const info = d[w];
-    s.lang = info.lang;
     if (info.lines) {
-      blame[w] = undefined;
-      s.lines = info.lines;
-      s.html = highlight(info.lines, info.lang);
-      s.virtual = false;
+      if (w === 'right') rightBlame = undefined;
+      setModel(w, info.name, info.lang, textOf(info.lines, info.endsWithEol));
     }
-    const wantVirtual = typing === w && info.endsWithEol;
-    if (s.virtual !== wantVirtual) {
-      if (wantVirtual) {
-        s.lines.push('');
-        s.html.push('');
-      } else {
-        s.lines.pop();
-        s.html.pop();
-      }
-      s.virtual = wantVirtual;
-    }
+    editors[w].updateOptions({ readOnly: typing !== w });
   }
-  useTabs = typing ? sides[typing].lines.some((l) => l.startsWith('\t')) : false;
-  sides.left.words = wordMap(d.hunks.flatMap((h) => h.words?.local ?? []));
-  sides.right.words = wordMap(d.hunks.flatMap((h) => h.words?.incoming ?? []));
-  rows = buildRows(d.blocks);
-  if (typing && sides[typing].virtual) rows.push({ left: -1, right: -1, kind: 'equal', hunk: -1, first: false, [typing]: sides[typing].lines.length - 1 });
-  reindex();
-  if (d.caret) {
-    caret = d.caret;
-    anchor = null;
-    want = -1;
-  }
-  if (typing) {
-    caret = clampPos(sides[typing].lines, caret);
-    if (anchor) anchor = clampPos(sides[typing].lines, anchor);
-  } else anchor = null;
-  leftPane.classList.toggle('edit', typing === 'left');
-  rightPane.classList.toggle('edit', typing === 'right');
-  openBtn.hidden = !d[d.editable ?? 'left'].openable;
+  const rows = buildRows(d.blocks);
+  starts = hunkRowStarts(rows);
+  spans = hunkSpans(rows);
   if (cur >= starts.length) cur = starts.length - 1;
 
   wsSel.value = d.options.ignoreWhitespace;
   eolCb.checked = d.options.ignoreEol;
   caseCb.checked = d.options.ignoreCase;
+  openBtn.hidden = !d[d.editable ?? 'left'].openable;
   revBtn.hidden = !d.canPickRevision;
   pullAllBtn.hidden = !d.editable || !d.hunks.length;
   pullAllBtn.title = d.editable === 'right' ? 'Pull every change into the right file' : 'Pull every change into the local file';
@@ -204,91 +242,91 @@ function applyData(d: DataMessage): void {
   noticeEl.textContent = d.notice ?? '';
   prevBtn.disabled = nextBtn.disabled = !starts.length;
   updateCounter();
-
-  maxLen = 1;
-  for (const l of sides.left.lines) if (l.length > maxLen) maxLen = l.length;
-  for (const l of sides.right.lines) if (l.length > maxLen) maxLen = l.length;
-  layoutSizes();
-  render(true);
-  drawRuler();
+  refreshLayout();
 }
 
-function layoutSizes(): void {
-  leftBox.style.minWidth = rightBox.style.minWidth = `${maxLen * charW + 80}px`;
-  const h = rows.length * ROW_H;
-  leftBox.style.minHeight = rightBox.style.minHeight = gBox.style.minHeight = `${h}px`;
-}
-
-function reindex(): void {
-  starts = hunkRowStarts(rows);
-  spans = hunkSpans(rows);
-  lineRow = [];
-  if (!typing) return;
-  for (let i = 0; i < rows.length; i++) {
-    const l = rows[i][typing];
-    if (l >= 0 && lineRow[l] === undefined) lineRow[l] = i;
-  }
+function refreshLayout(): void {
+  applyZones();
+  applyDecorations();
+  layoutGutter();
 }
 
 function updateCounter(): void {
   counter.textContent = starts.length ? `${cur >= 0 ? cur + 1 : '-'} / ${starts.length} changes` : 'no changes';
 }
 
-let renderedFrom = -1;
-let renderedTo = -1;
-function render(force = false): void {
+/** Plain filler blocks so both sides stay row-aligned: the shorter side of each hunk is padded after its last line. */
+function applyZones(): void {
   if (!data) return;
-  const viewH = leftPane.clientHeight || 600;
-  const first = Math.max(0, Math.floor(leftPane.scrollTop / ROW_H) - BUFFER);
-  const last = Math.min(rows.length, Math.ceil((leftPane.scrollTop + viewH) / ROW_H) + BUFFER);
-  if (!force && first >= renderedFrom && last <= renderedTo && renderedFrom !== -1) return;
-  renderedFrom = first;
-  renderedTo = last;
-  leftBox.replaceChildren(rowsHtml('left', first, last));
-  rightBox.replaceChildren(rowsHtml('right', first, last));
-  gBox.replaceChildren(gutterHtml(first, last));
-  for (const b of [leftBox, rightBox]) b.style.paddingTop = `${first * ROW_H}px`;
-  drawSelection();
+  const d = data;
+  const lh = lineHeight();
+  for (const w of SIDES) {
+    const e = editors[w];
+    const lines = models[w]?.getLineCount() ?? 0;
+    e.changeViewZones((acc) => {
+      for (const id of zoneIds[w]) acc.removeZone(id);
+      zoneIds[w] = [];
+      for (const sp of spans) {
+        const have = w === 'left' ? sp.leftCount : sp.rightCount;
+        if (have >= sp.count) continue;
+        const h = d.hunks[sp.hunk];
+        const start = w === 'left' ? h.localStart : h.incomingStart;
+        zoneIds[w].push(acc.addZone({ afterLineNumber: Math.min(start + have, lines), heightInPx: (sp.count - have) * lh, domNode: el('div', 'cmp-filler'), suppressMouseDown: true }));
+      }
+    });
+  }
 }
 
-function rowsHtml(side: 'left' | 'right', first: number, last: number): DocumentFragment {
-  const frag = document.createDocumentFragment();
-  const sv = sides[side];
-  for (let i = first; i < last; i++) {
-    const r = rows[i];
-    const idx = side === 'left' ? r.left : r.right;
-    const d = el('div');
-    const classes = ['row'];
-    if (idx < 0) {
-      classes.push('filler');
-    } else if (r.kind !== 'equal') {
-      classes.push(side === 'left' ? 'del' : 'ins');
+function rulerColor(hunk: number): string {
+  const fg = colorVar('--vscode-editor-foreground', '#cccccc');
+  const bg = colorVar('--vscode-editor-background', '#1e1e1e');
+  const c = data?.classes?.[hunk];
+  if (c === 'conflict') return colorVar('--vscode-editorError-foreground', '#f14c4c');
+  if (c === 'incoming') return colorVar('--vscode-button-background', '#0e639c');
+  if (c === 'outgoing' || c === 'mixed') return mix(fg, bg, 42);
+  const t = data?.hunks[hunk]?.type;
+  return t === 'insert' ? colorVar('--vscode-editorGutter-addedBackground', '#2ea043') : t === 'delete' ? colorVar('--vscode-editorGutter-deletedBackground', '#f85149') : colorVar('--vscode-editorGutter-modifiedBackground', '#1b81a8');
+}
+
+/** Line highlights, word marks, overview-ruler markers and the per-section author label. */
+function applyDecorations(): void {
+  if (!data) return;
+  const d = data;
+  const out: Record<Side, monaco.editor.IModelDeltaDecoration[]> = { left: [], right: [] };
+  const R = monaco.Range;
+  d.hunks.forEach((h, i) => {
+    const cf = d.classes?.[i] === 'conflict';
+    const sfx = (cf ? ' cmp-cf' : '') + (i === cur ? ' cmp-cur' : '');
+    const color = rulerColor(i);
+    const ranges = { left: [h.localStart, h.localEnd], right: [h.incomingStart, h.incomingEnd] } as const;
+    for (const w of SIDES) {
+      const [s, e] = ranges[w];
+      const m = models[w];
+      if (!m) continue;
+      const ruler = w === 'right' ? { color, position: monaco.editor.OverviewRulerLane.Full } : undefined;
+      if (e > s) {
+        out[w].push({ range: new R(s + 1, 1, e, 1), options: { isWholeLine: true, className: (w === 'left' ? 'cmp-del' : 'cmp-ins') + sfx, overviewRuler: ruler } });
+      } else if (ruler) {
+        const ln = Math.min(Math.max(1, s + 1), m.getLineCount());
+        out[w].push({ range: new R(ln, 1, ln, 1), options: { overviewRuler: ruler } });
+      }
     }
-    if (r.hunk >= 0 && r.hunk === cur) classes.push('cur');
-    if (r.hunk >= 0 && data?.classes?.[r.hunk] === 'conflict') classes.push('cf');
-    d.className = classes.join(' ');
-    d.dataset.row = String(i);
-    d.dataset.line = String(idx);
-    d.dataset.side = side;
-    if (idx >= 0) {
-      const ln = el('span', 'ln', String(idx + 1));
-      const tx = el('span', 'tx');
-      const ranges = sv.words.get(idx);
-      tx.innerHTML = ranges ? markWords(sv.html[idx] ?? '', ranges, side === 'left' ? 'w del' : 'w ins') : (sv.html[idx] ?? '');
-      const hunk = r.hunk >= 0 ? data?.hunks[r.hunk] : undefined;
-      const bl = blame[side];
-      const au = hunk && bl && typing !== side ? (side === 'left' ? rowAuthorLabel(bl, hunk.localStart, hunk.localEnd, idx) : rowAuthorLabel(bl, hunk.incomingStart, hunk.incomingEnd, idx)) : undefined;
-      if (au) {
-        const a = el('span', 'au', au.text);
-        a.title = au.title;
-        d.append(ln, a, tx);
-      } else d.append(ln, tx);
-    } else {
-      d.append(el('span', 'ln'), el('span', 'tx'));
+    const words = h.words;
+    if (words) {
+      for (const [w, list, cls] of [['left', words.local, 'cmp-w-del'], ['right', words.incoming, 'cmp-w-ins']] as const) {
+        for (const r of list) out[w].push({ range: new R(r.line + 1, r.start + 1, r.line + 1, r.end + 1), options: { inlineClassName: cls + (cf ? ' cmp-cf' : '') } });
+      }
     }
-    frag.append(d);
-  }
-  return frag;
+    const m = models.right;
+    const label = rightBlame && showsSectionLabel(d.classes?.[i]) && h.incomingEnd > h.incomingStart ? sectionLabel(rightBlame, h.incomingStart, h.incomingEnd) : undefined;
+    if (label && m) {
+      const ln = h.incomingStart + 1;
+      const col = m.getLineMaxColumn(ln);
+      // trailing nbsp: Monaco sizes the scroll width from the glyph run, so padding/margin would not be scrollable into view
+      out.right.push({ range: new R(ln, col, ln, col), options: { showIfCollapsed: true, after: { content: renderedLabel(label), inlineClassName: 'cmp-au' } } });
+    }
+  });
+  for (const w of SIDES) decorations[w].set(out[w]);
 }
 
 const CLASS_TITLE = {
@@ -303,559 +341,165 @@ function classSuffix(hunk: number): string {
   return c === 'incoming' ? ' k-in' : c === 'outgoing' ? ' k-out' : c === 'conflict' ? ' k-cf' : c === 'mixed' ? ' k-mx' : '';
 }
 
-function connector(sp: HunkSpan): SVGSVGElement {
+/** Top (px, content coordinates) of a hunk's first row (where its filler zone starts, if any): the bottom of the line above it. */
+function hunkTop(sp: HunkSpan): number {
+  const h = data?.hunks[sp.hunk];
+  return h && h.localStart > 0 ? editors.left.getBottomForLineNumber(Math.min(h.localStart, models.left?.getLineCount() ?? 1)) : 0;
+}
+
+function connector(sp: HunkSpan, top: number, lh: number): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
-  const h = sp.count * ROW_H;
-  const yl = sp.leftCount * ROW_H;
-  const yr = sp.rightCount * ROW_H;
+  const yl = sp.leftCount * lh;
+  const yr = sp.rightCount * lh;
   const mid = GUTTER_W / 2;
   svg.setAttribute('class', 'conn' + classSuffix(sp.hunk) + (sp.hunk === cur ? ' cur' : ''));
   svg.setAttribute('width', String(GUTTER_W));
-  svg.setAttribute('height', String(h));
-  svg.style.top = `${sp.first * ROW_H}px`;
+  svg.setAttribute('height', String(sp.count * lh));
+  svg.style.top = `${top}px`;
   const path = document.createElementNS(SVG_NS, 'path');
   path.setAttribute('d', `M0 0 L${GUTTER_W} 0 L${GUTTER_W} ${yr} C${mid} ${yr} ${mid} ${yl} 0 ${yl} Z`);
   svg.append(path);
   return svg;
 }
 
-function gutterHtml(first: number, last: number): DocumentFragment {
+/** Connectors and pull arrows live in content coordinates; scrolling only moves the whole box. */
+function layoutGutter(): void {
+  if (!data || data.notice) return;
+  const lh = lineHeight();
   const frag = document.createDocumentFragment();
-  let lo = 0;
-  let hi = spans.length;
-  while (lo < hi) {
-    const m = (lo + hi) >> 1;
-    if (spans[m].first + spans[m].count <= first) lo = m + 1;
-    else hi = m;
-  }
-  for (let k = lo; k < spans.length && spans[k].first < last; k++) {
-    const sp = spans[k];
-    frag.append(connector(sp));
-    if (data?.editable) {
+  for (const sp of spans) {
+    const top = hunkTop(sp);
+    frag.append(connector(sp, top, lh));
+    if (data.editable) {
       const b = el('button', 'pull' + classSuffix(sp.hunk), data.editable === 'left' ? '←' : '→');
       b.dataset.hunk = String(sp.hunk);
       const why = CLASS_TITLE[data.classes?.[sp.hunk] ?? 'mixed'];
       b.title = (why ? why + '. ' : '') + (data.editable === 'left' ? 'Pull this change into the left (local) file' : 'Pull this change into the right (local) file');
-      b.style.top = `${arrowTop(sp, ROW_H, BTN_H)}px`;
+      b.style.top = `${top + (sp.count * lh) / 2 - BTN_H / 2}px`;
       b.style.left = `${(GUTTER_W - BTN_W) / 2}px`;
       frag.append(b);
     }
   }
-  return frag;
+  gBox.replaceChildren(frag);
+  gBox.style.transform = `translateY(${-editors.left.getScrollTop()}px)`;
 }
 
-function drawRuler(): void {
-  const h = ruler.clientHeight;
-  markers = data && !data.notice ? rulerMarkers(spans, rows.length, h) : [];
-  const frag = document.createDocumentFragment();
-  for (const m of markers) {
-    const hunk = data?.hunks[m.hunk];
-    const cls = data?.classes?.[m.hunk];
-    const kind = cls === 'conflict' ? 'cf' : cls === 'incoming' ? 'in' : cls === 'outgoing' || cls === 'mixed' ? 'out' : hunk?.type ?? 'modify';
-    const d = el('div', `mark k-${kind}` + (m.hunk === cur ? ' cur' : ''));
-    d.style.top = `${m.top}px`;
-    d.style.height = `${m.height}px`;
-    frag.append(d);
-  }
-  ruler.replaceChildren(thumb, frag);
-  updateThumb();
+let layoutQueued = false;
+function scheduleGutter(): void {
+  if (layoutQueued) return;
+  layoutQueued = true;
+  requestAnimationFrame(() => {
+    layoutQueued = false;
+    layoutGutter();
+  });
 }
 
-function updateThumb(): void {
-  const t = viewportThumb(leftPane.scrollTop, leftPane.clientHeight, rows.length * ROW_H, ruler.clientHeight);
-  thumb.style.top = `${t.top}px`;
-  thumb.style.height = `${t.height}px`;
+let syncingScroll = false;
+for (const w of SIDES) {
+  const other = editors[w === 'left' ? 'right' : 'left'];
+  editors[w].onDidScrollChange((e) => {
+    if (e.scrollTopChanged && w === 'left') gBox.style.transform = `translateY(${-e.scrollTop}px)`;
+    // a side that clamps to its own narrower width fires its own event; ignoring those keeps the two from chasing each other
+    if (syncingScroll || (!e.scrollTopChanged && !e.scrollLeftChanged)) return;
+    syncingScroll = true;
+    try {
+      if (e.scrollTopChanged && other.getScrollTop() !== e.scrollTop) other.setScrollTop(e.scrollTop, monaco.editor.ScrollType.Immediate);
+      if (e.scrollLeftChanged && other.getScrollLeft() !== e.scrollLeft) other.setScrollLeft(e.scrollLeft, monaco.editor.ScrollType.Immediate);
+    } finally {
+      syncingScroll = false;
+    }
+  });
+  editors[w].onDidContentSizeChange(scheduleGutter);
+  editors[w].onDidChangeConfiguration((e) => {
+    if (e.hasChanged(monaco.editor.EditorOption.lineHeight)) {
+      applyZones();
+      scheduleGutter();
+    }
+  });
 }
-
-function selectHunk(hunk: number): void {
-  cur = hunk;
-  const i = starts.length ? hunk : -1;
-  if (i >= 0 && spans[hunk]) {
-    const y = Math.max(0, spans[hunk].first * ROW_H - leftPane.clientHeight / 3);
-    leftPane.scrollTop = y;
-    rightPane.scrollTop = y;
-    gutter.scrollTop = y;
-  }
-  updateCounter();
-  render(true);
-  drawRuler();
-}
-
-function rulerPointer(e: MouseEvent): void {
-  const y = e.clientY - ruler.getBoundingClientRect().top;
-  const hunk = hunkAtY(markers, y);
-  if (hunk !== undefined) {
-    if (hunk !== cur) selectHunk(hunk);
-    return;
-  }
-  const row = rowAtY(y, rows.length, ruler.clientHeight);
-  const top = Math.max(0, row * ROW_H - leftPane.clientHeight / 2);
-  leftPane.scrollTop = top;
-  rightPane.scrollTop = top;
-  gutter.scrollTop = top;
-}
-let rulerDrag = false;
-ruler.addEventListener('mousedown', (e) => {
-  if (e.button !== 0) return;
-  e.preventDefault();
-  rulerDrag = true;
-  rulerPointer(e);
+gutter.addEventListener('wheel', (e) => {
+  editors.right.setScrollTop(editors.right.getScrollTop() + e.deltaY, monaco.editor.ScrollType.Immediate);
 });
-document.addEventListener('mousemove', (e) => {
-  if (rulerDrag) rulerPointer(e);
-});
-document.addEventListener('mouseup', () => {
-  rulerDrag = false;
+
+gBox.addEventListener('click', (e) => {
+  const pull = (e.target as HTMLElement).closest('button.pull') as HTMLButtonElement | null;
+  if (pull && data) {
+    cur = Number(pull.dataset.hunk);
+    vscode.postMessage({ type: 'pull', version: data.version, hunk: Number(pull.dataset.hunk) });
+    // the button is outside Monaco: hand focus back so Ctrl+S and typing keep working, caret at the pulled section
+    const h = data.hunks[cur];
+    const side = data.editable;
+    if (side && h) {
+      const ed = editors[side];
+      ed.setPosition({ lineNumber: Math.min(Math.max(1, (side === 'left' ? h.localStart : h.incomingStart) + 1), ed.getModel()?.getLineCount() ?? 1), column: 1 });
+      ed.focus();
+    }
+  }
 });
 
 function goto(dir: number): void {
   if (!starts.length) return;
   cur = cur < 0 ? (dir > 0 ? 0 : starts.length - 1) : (cur + dir + starts.length) % starts.length;
-  const y = Math.max(0, starts[cur] * ROW_H - leftPane.clientHeight / 3);
-  leftPane.scrollTop = y;
-  rightPane.scrollTop = y;
-  gutter.scrollTop = y;
+  const sp = spans[cur];
+  if (sp) editors.left.setScrollTop(Math.max(0, hunkTop(sp) - editors.left.getLayoutInfo().height / 3), monaco.editor.ScrollType.Immediate);
   updateCounter();
-  render(true);
-  drawRuler();
+  applyDecorations();
+  layoutGutter();
 }
 
-let ticking = false;
-function onScroll(from: HTMLElement): void {
-  for (const o of [leftPane, rightPane, gutter]) {
-    if (o !== from) {
-      if (o.scrollTop !== from.scrollTop) o.scrollTop = from.scrollTop;
-      if (o !== gutter && from !== gutter && o.scrollLeft !== from.scrollLeft) o.scrollLeft = from.scrollLeft;
-    }
-  }
-  if (!ticking) {
-    ticking = true;
-    requestAnimationFrame(() => {
-      ticking = false;
-      render();
-      updateThumb();
-    });
-  }
-}
-leftPane.addEventListener('scroll', () => onScroll(leftPane));
-rightPane.addEventListener('scroll', () => onScroll(rightPane));
-gutter.addEventListener('wheel', (e) => {
-  leftPane.scrollTop += e.deltaY;
-});
-window.addEventListener('resize', () => {
-  render(true);
-  drawRuler();
-});
+// Alt+click (multi-cursor) never sends a key between Alt down and up, so VS Code would read the release as a lone Alt tap
+// and move focus to its menu bar (window.customMenuBarAltFocus). Keep that Alt keyup from reaching the host.
+let altClicked = false;
+window.addEventListener('mousedown', (e) => (altClicked = altClicked || e.altKey), true);
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Alt' && !e.repeat) altClicked = false;
+}, true);
+window.addEventListener('keyup', (e) => {
+  if (e.key !== 'Alt' || !altClicked) return;
+  altClicked = false;
+  e.stopImmediatePropagation();
+  e.preventDefault();
+}, true);
 
-main.addEventListener('click', (e) => {
-  const pull = (e.target as HTMLElement).closest('button.pull') as HTMLButtonElement | null;
-  if (pull && data) {
-    cur = Number(pull.dataset.hunk);
-    vscode.postMessage({ type: 'pull', version: data.version, hunk: Number(pull.dataset.hunk) });
+// Ctrl+S anywhere in the view (Monaco's own binding already handled it when the editor had focus)
+window.addEventListener('keydown', (e) => {
+  if (typing && !e.defaultPrevented && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    vscode.postMessage({ type: 'save' });
   }
 });
 
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'F7' || (e.altKey && e.key === 'ArrowDown')) goto(e.shiftKey ? -1 : 1);
-  else if (e.altKey && e.key === 'ArrowUp') goto(-1);
-});
-
-// ---- editing of the local side: a hidden textarea captures input, the model is `sides[typing].lines` (one entry per document line) ----
-
-const paneOf = (side: 'left' | 'right'): HTMLElement => (side === 'left' ? leftPane : rightPane);
-const modelLines = (): string[] => (typing ? sides[typing].lines : []);
-const hasSelection = (): boolean => !!anchor && comparePos(anchor, caret) !== 0;
-const selection = (): { a: Pos; b: Pos } => {
-  const a = hasSelection() && anchor ? anchor : caret;
-  return comparePos(a, caret) <= 0 ? { a, b: caret } : { a: caret, b: a };
-};
-
-function highlightLine(side: SideView, text: string): string {
-  return highlight([text], side.lang)[0] ?? '';
-}
-
-function shiftWords(m: Map<number, Range[]>, from: number, to: number, newCount: number): Map<number, Range[]> {
-  const delta = newCount - (to - from + 1);
-  const out = new Map<number, Range[]>();
-  for (const [line, r] of m) {
-    if (line < from) out.set(line, r);
-    else if (line > to) out.set(line + delta, r);
-  }
-  return out;
-}
-
-function spliceArray<T>(arr: T[], start: number, count: number, items: T[]): void {
-  if (items.length < 2000) {
-    arr.splice(start, count, ...items);
-    return;
-  }
-  const rest = arr.splice(start + count);
-  arr.length = start;
-  for (const i of items) arr.push(i);
-  for (const r of rest) arr.push(r);
-}
-
-/** Applies an edit to the local model immediately and sends it to the extension. */
-function edit(a: Pos, b: Pos, text: string): void {
-  if (!typing) return;
-  const side = sides[typing];
-  const oldCount = b.line - a.line + 1;
-  applyEditToLines(side.lines, a, b, text);
-  const newCount = text.split('\n').length;
-  const fresh: string[] = [];
-  for (let i = 0; i < newCount; i++) {
-    const t = side.lines[a.line + i] ?? '';
-    if (t.length > maxLen) maxLen = t.length;
-    fresh.push(highlightLine(side, t));
-  }
-  spliceArray(side.html, a.line, oldCount, fresh);
-  side.words = shiftWords(side.words, a.line, b.line, newCount);
-  if (newCount !== oldCount) {
-    rows = shiftRows(rows, typing, a.line, b.line, newCount);
-    reindex();
-    layoutSizes();
-  }
-  caret = endPosition(a, text);
-  anchor = null;
-  want = -1;
-  seq++;
-  sentSeq = seq;
-  vscode.postMessage({ type: 'edit', seq, start: a, end: b, text });
-  updateCounter();
-  render(true);
-  ensureVisible();
-}
-
-function ensureVisible(): void {
-  if (!typing) return;
-  const row = lineRow[caret.line];
-  if (row === undefined) return;
-  const pane = paneOf(typing);
-  const top = row * ROW_H;
-  const viewH = pane.clientHeight - 18;
-  if (top < pane.scrollTop) pane.scrollTop = top;
-  else if (top + ROW_H > pane.scrollTop + viewH) pane.scrollTop = top + ROW_H - viewH;
-  const x = TEXT_X + visualCol(modelLines()[caret.line] ?? '', caret.col) * charW;
-  const viewW = pane.clientWidth - 18;
-  if (x < pane.scrollLeft + TEXT_X + 4) pane.scrollLeft = Math.max(0, x - TEXT_X - 40);
-  else if (x > pane.scrollLeft + viewW - 8) pane.scrollLeft = x - viewW + 60;
-  drawSelection();
-}
-
-function drawSelection(): void {
-  overlays.left.replaceChildren();
-  overlays.right.replaceChildren();
-  if (!typing) return;
-  const lines = modelLines();
-  const frag = document.createDocumentFragment();
-  if (hasSelection()) {
-    const { a, b } = selection();
-    for (let i = Math.max(0, renderedFrom); i < renderedTo; i++) {
-      const line = rows[i]?.[typing] ?? -1;
-      if (line < a.line || line > b.line) continue;
-      const t = lines[line] ?? '';
-      const v1 = line === a.line ? visualCol(t, a.col) : 0;
-      const v2 = line === b.line ? visualCol(t, b.col) : visualCol(t, t.length) + 1;
-      if (v2 <= v1) continue;
-      const r = el('div', 'selrect' + (focused ? '' : ' idle'));
-      r.style.top = `${i * ROW_H}px`;
-      r.style.left = `${TEXT_X + v1 * charW}px`;
-      r.style.width = `${(v2 - v1) * charW}px`;
-      frag.append(r);
-    }
-  }
-  const row = lineRow[caret.line];
-  if (focused && row !== undefined && row >= renderedFrom && row < renderedTo) {
-    const c = el('div', 'caret');
-    c.style.top = `${row * ROW_H}px`;
-    c.style.left = `${TEXT_X + visualCol(lines[caret.line] ?? '', caret.col) * charW - 1}px`;
-    frag.append(c);
-  }
-  overlays[typing].append(frag);
-}
-
-function moveCaret(to: Pos, extend: boolean, keepWant = false): void {
-  if (extend) anchor ??= { ...caret };
-  else anchor = null;
-  caret = to;
-  if (!keepWant) want = -1;
-  ensureVisible();
-}
-
-const docEnd = (): Pos => {
-  const l = modelLines();
-  return { line: l.length - 1, col: (l[l.length - 1] ?? '').length };
-};
-
-function deleteSelection(): boolean {
-  if (!hasSelection()) return false;
-  const { a, b } = selection();
-  edit(a, b, '');
-  return true;
-}
-
-function insertText(text: string): void {
-  if (!typing || !text) return;
-  const { a, b } = selection();
-  edit(a, b, text);
-}
-
-function onKey(e: KeyboardEvent): void {
-  if (!typing || composing) return;
-  const lines = modelLines();
-  const ctrl = e.ctrlKey || e.metaKey;
-  const key = e.key;
-  const text = lines[caret.line] ?? '';
-  const handled = (): void => e.preventDefault();
-
-  if (ctrl && !e.altKey) {
-    const k = key.toLowerCase();
-    if (k === 'z' || k === 'y') {
-      handled();
-      post(k === 'y' || e.shiftKey ? 'redo' : 'undo');
-      return;
-    }
-    if (k === 's') {
-      handled();
-      vscode.postMessage({ type: 'save' });
-      return;
-    }
-    if (k === 'a') {
-      handled();
-      anchor = { line: 0, col: 0 };
-      caret = docEnd();
-      drawSelection();
-      return;
-    }
-    if (k === 'c' || k === 'x' || k === 'v') return; // clipboard events do the work
-  }
-  if (e.altKey && (key === 'ArrowUp' || key === 'ArrowDown')) return;
-  if (key === 'F7') return;
-
-  switch (key) {
-    case 'ArrowLeft': {
-      handled();
-      if (!e.shiftKey && hasSelection()) return moveCaret(selection().a, false);
-      if (caret.col === 0) return caret.line > 0 ? moveCaret({ line: caret.line - 1, col: lines[caret.line - 1].length }, e.shiftKey) : undefined;
-      return moveCaret({ line: caret.line, col: ctrl ? wordLeft(text, caret.col) : caret.col - 1 }, e.shiftKey);
-    }
-    case 'ArrowRight': {
-      handled();
-      if (!e.shiftKey && hasSelection()) return moveCaret(selection().b, false);
-      if (caret.col >= text.length) return caret.line < lines.length - 1 ? moveCaret({ line: caret.line + 1, col: 0 }, e.shiftKey) : undefined;
-      return moveCaret({ line: caret.line, col: ctrl ? wordRight(text, caret.col) : caret.col + 1 }, e.shiftKey);
-    }
-    case 'ArrowUp':
-    case 'ArrowDown':
-    case 'PageUp':
-    case 'PageDown': {
-      handled();
-      const page = Math.max(1, Math.floor(paneOf(typing).clientHeight / ROW_H) - 1);
-      const step = key === 'PageUp' ? -page : key === 'PageDown' ? page : key === 'ArrowUp' ? -1 : 1;
-      const line = Math.max(0, Math.min(lines.length - 1, caret.line + step));
-      if (want < 0) want = visualCol(text, caret.col);
-      if (line === caret.line) return moveCaret(step < 0 ? { line, col: 0 } : { line, col: text.length }, e.shiftKey);
-      return moveCaret({ line, col: colAtVisual(lines[line], want) }, e.shiftKey, true);
-    }
-    case 'Home': {
-      handled();
-      if (ctrl) return moveCaret({ line: 0, col: 0 }, e.shiftKey);
-      const indent = leadingWhitespace(text).length;
-      return moveCaret({ line: caret.line, col: caret.col === indent ? 0 : indent }, e.shiftKey);
-    }
-    case 'End':
-      handled();
-      return moveCaret(ctrl ? docEnd() : { line: caret.line, col: text.length }, e.shiftKey);
-    case 'Backspace': {
-      handled();
-      if (deleteSelection()) return;
-      if (caret.col > 0) return edit({ line: caret.line, col: ctrl ? wordLeft(text, caret.col) : caret.col - 1 }, caret, '');
-      if (caret.line > 0) return edit({ line: caret.line - 1, col: lines[caret.line - 1].length }, caret, '');
-      return;
-    }
-    case 'Delete': {
-      handled();
-      if (deleteSelection()) return;
-      if (caret.col < text.length) return edit(caret, { line: caret.line, col: ctrl ? wordRight(text, caret.col) : caret.col + 1 }, '');
-      if (caret.line < lines.length - 1) return edit(caret, { line: caret.line + 1, col: 0 }, '');
-      return;
-    }
-    case 'Enter': {
-      handled();
-      const { a } = selection();
-      const indent = leadingWhitespace(lines[a.line] ?? '').slice(0, a.col);
-      return insertText('\n' + indent);
-    }
-    case 'Tab': {
-      handled();
-      const unit = useTabs ? '\t' : '    ';
-      const { a, b } = selection();
-      if (e.shiftKey || a.line !== b.line) {
-        const last = b.line > a.line && b.col === 0 ? b.line - 1 : b.line;
-        const start = { line: a.line, col: 0 };
-        const end = { line: last, col: (lines[last] ?? '').length };
-        const next = reindent(lines, a.line, last, e.shiftKey, unit);
-        if (next === textInRange(lines, start, end)) return;
-        edit(start, end, next);
-        anchor = { line: a.line, col: 0 };
-        caret = endPosition(start, next);
-        drawSelection();
-        return;
-      }
-      return insertText(useTabs ? '\t' : ' '.repeat(4 - (visualCol(text, a.col) % 4)));
-    }
-    case 'Escape':
-      anchor = null;
-      drawSelection();
-      return;
-  }
-}
-
-function post(kind: 'undo' | 'redo'): void {
-  seq++;
-  sentSeq = seq;
-  vscode.postMessage({ type: kind, seq });
-}
-
-function lineRangeAtCaret(): { a: Pos; b: Pos } {
-  const lines = modelLines();
-  const n = caret.line;
-  if (n < lines.length - 1) return { a: { line: n, col: 0 }, b: { line: n + 1, col: 0 } };
-  if (n > 0) return { a: { line: n - 1, col: lines[n - 1].length }, b: { line: n, col: lines[n].length } };
-  return { a: { line: 0, col: 0 }, b: { line: 0, col: (lines[0] ?? '').length } };
-}
-
-function copyText(): string {
-  const lines = modelLines();
-  if (hasSelection()) {
-    const { a, b } = selection();
-    return textInRange(lines, a, b);
-  }
-  return (lines[caret.line] ?? '') + '\n';
-}
-
-ta.addEventListener('keydown', onKey);
-ta.addEventListener('copy', (e) => {
-  if (!typing) return;
-  e.preventDefault();
-  e.clipboardData?.setData('text/plain', copyText());
-});
-ta.addEventListener('cut', (e) => {
-  if (!typing) return;
-  e.preventDefault();
-  e.clipboardData?.setData('text/plain', copyText());
-  if (!deleteSelection()) {
-    const { a, b } = lineRangeAtCaret();
-    edit(a, b, '');
+  if (e.key === 'F7') {
+    e.preventDefault();
+    goto(e.shiftKey ? -1 : 1);
   }
 });
-ta.addEventListener('paste', (e) => {
-  if (!typing) return;
-  e.preventDefault();
-  insertText((e.clipboardData?.getData('text/plain') ?? '').replace(/\r\n?/g, '\n'));
-});
-ta.addEventListener('input', () => {
-  if (composing) return;
-  const v = ta.value;
-  ta.value = '';
-  insertText(v.replace(/\r\n?/g, '\n'));
-});
-ta.addEventListener('compositionstart', () => {
-  composing = true;
-});
-ta.addEventListener('compositionend', () => {
-  composing = false;
-  const v = ta.value;
-  ta.value = '';
-  insertText(v);
-});
-ta.addEventListener('focus', () => {
-  focused = true;
-  drawSelection();
-});
-ta.addEventListener('blur', () => {
-  focused = false;
-  drawSelection();
-});
 
-function posAt(e: MouseEvent): Pos {
-  const side = typing as 'left' | 'right';
-  const pane = paneOf(side);
-  const r = pane.getBoundingClientRect();
-  const lines = modelLines();
-  const y = e.clientY - r.top + pane.scrollTop;
-  const row = Math.max(0, Math.min(rows.length - 1, Math.floor(y / ROW_H)));
-  const line = rows[row]?.[side] ?? -1;
-  if (line < 0) {
-    for (let k = row; k < rows.length; k++) if (rows[k][side] >= 0) return { line: rows[k][side], col: 0 };
-    return docEnd();
-  }
-  const x = e.clientX - r.left + pane.scrollLeft - TEXT_X;
-  return { line, col: x <= 0 ? 0 : colAtVisual(lines[line] ?? '', x / charW) };
-}
-
-function onMouseDown(e: MouseEvent): void {
-  if (!typing || e.button !== 0) return;
-  const pane = paneOf(typing);
-  const r = pane.getBoundingClientRect();
-  if (e.clientX - r.left >= pane.clientWidth || e.clientY - r.top >= pane.clientHeight) return;
-  e.preventDefault();
-  ta.focus({ preventScroll: true });
-  const p = posAt(e);
-  const lines = modelLines();
-  want = -1;
-  if (e.detail === 2) {
-    const [s, en] = wordAt(lines[p.line] ?? '', p.col);
-    anchor = { line: p.line, col: s };
-    caret = { line: p.line, col: en };
-  } else if (e.detail >= 3) {
-    anchor = { line: p.line, col: 0 };
-    caret = p.line < lines.length - 1 ? { line: p.line + 1, col: 0 } : { line: p.line, col: (lines[p.line] ?? '').length };
-  } else {
-    if (e.shiftKey) anchor ??= { ...caret };
-    else anchor = p;
-    caret = p;
-    dragging = true;
-  }
-  drawSelection();
-}
-leftPane.addEventListener('mousedown', (e) => typing === 'left' && onMouseDown(e));
-rightPane.addEventListener('mousedown', (e) => typing === 'right' && onMouseDown(e));
-document.addEventListener('mousemove', (e) => {
-  if (!dragging || !typing) return;
-  const pane = paneOf(typing);
-  const r = pane.getBoundingClientRect();
-  if (e.clientY < r.top) pane.scrollTop -= ROW_H;
-  else if (e.clientY > r.bottom) pane.scrollTop += ROW_H;
-  caret = posAt(e);
-  drawSelection();
-});
-document.addEventListener('mouseup', () => {
-  if (!dragging) return;
-  dragging = false;
-  if (anchor && comparePos(anchor, caret) === 0) anchor = null;
-  drawSelection();
+watchTheme(() => {
+  applyTheme();
+  const f = editorFont();
+  for (const w of SIDES) editors[w].updateOptions(f);
+  refreshLayout();
 });
 
 window.addEventListener('message', (e: MessageEvent<ToWebview>) => {
   const m = e.data;
+  if (!m || typeof m !== 'object') return;
   if (m.type === 'busy') {
     busyEl.textContent = m.busy ? 'Loading…' : '';
     return;
   }
   if (m.type === 'blame') {
-    blame[m.side] = m.blame;
-    render(true);
+    if (m.side === 'right') {
+      rightBlame = m.blame;
+      applyDecorations();
+    }
     return;
   }
-  if (m.ackSeq < sentSeq) return;
+  // Monaco posts its own scheduling messages to this window; only ours carry type 'data'
+  if (m.type !== 'data' || m.ackSeq < sentSeq) return;
   applyData(m);
 });
 
-{
-  const probe = el('span', 'probe', 'MMMMMMMMMM');
-  document.body.append(probe);
-  charW = probe.getBoundingClientRect().width / 10 || 8;
-  probe.remove();
-}
 vscode.postMessage({ type: 'ready' });

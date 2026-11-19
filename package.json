@@ -102,6 +102,36 @@
         }
       },
       {
+        "command": "svnWorkflow.pane.toggleUnversioned",
+        "title": "Show Unversioned Items",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.pane.toggleUnversionedOn",
+        "title": "✓ Show Unversioned Items",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.pane.toggleIgnored",
+        "title": "Show Ignored Items (svn:ignore)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.pane.toggleIgnoredOn",
+        "title": "✓ Show Ignored Items (svn:ignore)",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.localIgnore.add",
+        "title": "Add to Local Ignore List",
+        "category": "SVN"
+      },
+      {
+        "command": "svnWorkflow.localIgnore.remove",
+        "title": "Remove from Local Ignore List",
+        "category": "SVN"
+      },
+      {
         "command": "svnWorkflow.pane.viewAsTree",
         "title": "View as Tree",
         "category": "SVN",
@@ -132,7 +162,7 @@
       },
       {
         "command": "svnWorkflow.ignore",
-        "title": "Add to svn:ignore...",
+        "title": "Add to Ignore List (svn:ignore)...",
         "category": "SVN"
       },
       {
@@ -849,6 +879,22 @@
     "menus": {
       "commandPalette": [
         {
+          "command": "svnWorkflow.pane.toggleUnversioned",
+          "when": "false"
+        },
+        {
+          "command": "svnWorkflow.pane.toggleIgnored",
+          "when": "false"
+        },
+        {
+          "command": "svnWorkflow.localIgnore.add",
+          "when": "false"
+        },
+        {
+          "command": "svnWorkflow.localIgnore.remove",
+          "when": "false"
+        },
+        {
           "command": "svnWorkflow.pane.openDiff",
           "when": "false"
         },
@@ -858,6 +904,14 @@
         },
         {
           "command": "svnWorkflow.statusBar.menu",
+          "when": "false"
+        },
+        {
+          "command": "svnWorkflow.pane.toggleUnversionedOn",
+          "when": "false"
+        },
+        {
+          "command": "svnWorkflow.pane.toggleIgnoredOn",
           "when": "false"
         }
       ],
@@ -946,6 +1000,11 @@
           "submenu": "svnWorkflow.pane.title.diagSubmenu",
           "when": "view == svnWorkflow.pane",
           "group": "5_more@5"
+        },
+        {
+          "submenu": "svnWorkflow.pane.filterSubmenu",
+          "when": "view == svnWorkflow.pane",
+          "group": "navigation@5"
         }
       ],
       "view/item/context": [
@@ -971,7 +1030,7 @@
         },
         {
           "command": "svnWorkflow.update",
-          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnFolder)\\b/",
           "group": "2_modify@3"
         },
         {
@@ -996,7 +1055,7 @@
         },
         {
           "command": "svnWorkflow.history",
-          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnFolder)\\b/",
           "group": "3_history@1"
         },
         {
@@ -1081,13 +1140,33 @@
         },
         {
           "submenu": "svnWorkflow.pane.diffSubmenu",
-          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnChangelist)\\b/",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnFolder|svnChangelist)\\b/",
           "group": "7_more@3"
         },
         {
           "submenu": "svnWorkflow.pane.mergeSubmenu",
           "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
           "group": "7_more@4"
+        },
+        {
+          "command": "svnWorkflow.ignore",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnFolder)\\b/ && viewItem =~ /\\bunversioned\\b/",
+          "group": "4_ignore@1"
+        },
+        {
+          "command": "svnWorkflow.localIgnore.add",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnFolder)\\b/",
+          "group": "4_ignore@2"
+        },
+        {
+          "command": "svnWorkflow.localIgnore.remove",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnLocalIgnored\\b/",
+          "group": "4_ignore@1"
+        },
+        {
+          "command": "svnWorkflow.pane.openFile",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\bsvnLocalIgnored\\b/ && viewItem =~ /\\bfile\\b/",
+          "group": "1_open@1"
         }
       ],
       "explorer/context": [
@@ -1661,12 +1740,12 @@
         },
         {
           "command": "svnWorkflow.diff.base",
-          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnFolder)\\b/",
           "group": "1_diff@2"
         },
         {
           "command": "svnWorkflow.diff.head",
-          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo)\\b/",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnFolder)\\b/",
           "group": "1_diff@3"
         },
         {
@@ -1686,12 +1765,12 @@
         },
         {
           "command": "svnWorkflow.diff.exportUnified",
-          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnChangelist)\\b/",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnFolder|svnChangelist)\\b/",
           "group": "1_diff@7"
         },
         {
           "command": "svnWorkflow.patch.create",
-          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnChangelist)\\b/",
+          "when": "view == svnWorkflow.pane && viewItem =~ /\\b(svnItem|svnRepo|svnFolder|svnChangelist)\\b/",
           "group": "1_diff@8"
         },
         {
@@ -1887,6 +1966,28 @@
           "command": "svnWorkflow.auth.clearSvnCache",
           "group": "1_diag@4"
         }
+      ],
+      "svnWorkflow.pane.filterSubmenu": [
+        {
+          "command": "svnWorkflow.pane.toggleUnversioned",
+          "when": "!svnWorkflow.paneShowUnversioned",
+          "group": "1_show@1"
+        },
+        {
+          "command": "svnWorkflow.pane.toggleUnversionedOn",
+          "when": "svnWorkflow.paneShowUnversioned",
+          "group": "1_show@1"
+        },
+        {
+          "command": "svnWorkflow.pane.toggleIgnored",
+          "when": "!svnWorkflow.paneShowIgnored",
+          "group": "1_show@2"
+        },
+        {
+          "command": "svnWorkflow.pane.toggleIgnoredOn",
+          "when": "svnWorkflow.paneShowIgnored",
+          "group": "1_show@2"
+        }
       ]
     },
     "submenus": [
@@ -1949,6 +2050,11 @@
       {
         "id": "svnWorkflow.pane.title.diagSubmenu",
         "label": "Diagnostics"
+      },
+      {
+        "id": "svnWorkflow.pane.filterSubmenu",
+        "label": "Filter",
+        "icon": "$(filter)"
       }
     ]
   },
@@ -1980,6 +2086,7 @@
     "vitest": "^5.1.0"
   },
   "dependencies": {
-    "fast-xml-parser": "5.12.1"
+    "fast-xml-parser": "5.12.1",
+    "monaco-editor": "0.57.0"
   }
 }

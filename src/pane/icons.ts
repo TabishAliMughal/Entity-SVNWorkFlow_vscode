@@ -41,6 +41,11 @@ export function paneIcon(i: Pick<ChangeItem, 'item' | 'outgoing' | 'incoming' | 
   return { dir, mark };
 }
 
+/** svn:ignore'd items shown via "Show Ignored": neither outgoing nor incoming, so no direction arrow applies. */
+export function isDisplayOnly(i: Pick<ChangeItem, 'outgoing' | 'incoming'>): boolean {
+  return !i.outgoing && !i.incoming;
+}
+
 export function iconFile(icon: PaneIcon, theme: 'light' | 'dark'): string {
   return `media/pane/${icon.dir}-${icon.mark}-${theme}.svg`;
 }

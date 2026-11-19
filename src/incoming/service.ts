@@ -8,6 +8,8 @@ import { ChangeItem, RemoteInfo, aggregateIncoming, buildItems, isSameOrUnder, r
 export interface RepoState {
   repoName: string;
   items: ChangeItem[];
+  /** Changed items on the Local Ignore List: kept out of `items` so no commit/update/count path sees them. */
+  ignored: ChangeItem[];
   /** Server revision seen by the last successful remote check. */
   youngest?: number;
   remoteCheckedAt?: number;
@@ -17,7 +19,7 @@ export interface RepoState {
 }
 
 export interface StatusSource {
-  status(target: string, opts: { showUpdates?: boolean; repoName?: string; signal?: AbortSignal }): Promise<{ entries: StatusEntry[]; youngest?: number }>;
+  status(target: string, opts: { showUpdates?: boolean; noIgnore?: boolean; repoName?: string; signal?: AbortSignal }): Promise<{ entries: StatusEntry[]; youngest?: number }>;
 }
 
 export interface RefreshOptions {
@@ -55,6 +57,10 @@ export class IncomingService {
   isRepoBusy?: (repoName: string) => boolean;
   /** Paths of a repo covered by the open workspace (see scope.ts); [] hides the repo. Default: the whole working copy. */
   scope?: (repo: RepoEntry) => string[];
+  /** Workspace-local ignore list test; matching items go to RepoState.ignored. */
+  isLocalIgnored?: (p: string) => boolean;
+  /** Also list svn:ignore'd items (status --no-ignore); off by default because it is slower. */
+  includeIgnored = false;
   onEntries?: (repo: RepoEntry, entries: readonly StatusEntry[], remote: boolean) => void;
 
   constructor(
@@ -87,6 +93,26 @@ export class IncomingService {
   private setBusy(delta: number): void {
     this.busy += delta;
     for (const l of [...this.busyListeners]) l();
+  }
+
+  /** The Local Ignore List changed: re-split the cached items without calling svn. */
+  localIgnoreChanged(): void {
+    for (const [name, s] of this.states) this.states.set(name, { ...s, ...this.split([...s.items, ...s.ignored]) });
+    this.emitChange();
+  }
+
+  setIncludeIgnored(on: boolean): void {
+    if (this.includeIgnored === on) return;
+    this.includeIgnored = on;
+    if (!on) for (const [name, s] of this.states) this.states.set(name, { ...s, items: s.items.filter((i) => i.item !== 'ignored'), ignored: s.ignored.filter((i) => i.item !== 'ignored') });
+    this.emitChange();
+    if (on) void this.refresh({ remote: false });
+  }
+
+  private split(items: ChangeItem[]): { items: ChangeItem[]; ignored: ChangeItem[] } {
+    const test = this.isLocalIgnored;
+    if (!test) return { items, ignored: [] };
+    return { items: items.filter((i) => !test(i.path)), ignored: items.filter((i) => test(i.path)) };
   }
 
   getState(repoName: string): RepoState | undefined {
@@ -257,7 +283,7 @@ export class IncomingService {
       if (!targets.length) return;
       const runs: Array<{ entries: StatusEntry[]; youngest?: number }> = [];
       for (const t of targets) {
-        runs.push(await this.client.status(t, { showUpdates: remote, repoName: repo.name, signal }));
+        runs.push(await this.client.status(t, { showUpdates: remote, noIgnore: this.includeIgnored, repoName: repo.name, signal }));
         if (signal.aborted) return;
       }
       const res = { entries: runs.flatMap((r) => r.entries), youngest: runs.map((r) => r.youngest).find((y) => y !== undefined) };
@@ -270,7 +296,7 @@ export class IncomingService {
       const now = Date.now();
       this.states.set(repo.name, {
         repoName: repo.name,
-        items: buildItems(repo.name, res.entries, remoteMap, abs),
+        ...this.split(buildItems(repo.name, res.entries, remoteMap, abs)),
         youngest: remote ? res.youngest : prev?.youngest,
         remoteCheckedAt: remote ? now : prev?.remoteCheckedAt,
         localCheckedAt: now,
@@ -282,7 +308,7 @@ export class IncomingService {
       const message = e instanceof Error ? e.message : String(e);
       this.logger.warn(`Status check failed for "${repo.name}" (${kind}): ${message}`);
       const changed = prev?.error?.kind !== kind;
-      this.states.set(repo.name, { ...(prev ?? { repoName: repo.name, items: [] }), error: { kind, message } });
+      this.states.set(repo.name, { ...(prev ?? { repoName: repo.name, items: [], ignored: [] }), error: { kind, message } });
       if (BACKOFF_KINDS.has(kind)) this.blocked.add(repo.name);
       if (changed) for (const l of [...this.errorListeners]) l(repo, e);
     }

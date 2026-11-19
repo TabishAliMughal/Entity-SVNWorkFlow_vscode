@@ -21,3 +21,16 @@ export function languageFor(fileName: string): string | undefined {
   const i = base.lastIndexOf('.');
   return i < 0 ? undefined : BY_EXT[base.slice(i + 1)];
 }
+
+/** hljs ids that differ from the Monaco language id (Monaco has a real html language and calls bash "shell"). */
+const MONACO_ID: Record<string, string> = { bash: 'shell', properties: 'ini' };
+const MONACO_BY_EXT: Record<string, string> = { html: 'html', htm: 'html', xhtml: 'html', tpl: 'html', vue: 'html' };
+
+/** Monaco language id for a file name (the compare view's editors); undefined = plain text. */
+export function monacoLanguageFor(fileName: string): string | undefined {
+  const lower = fileName.toLowerCase();
+  const ext = lower.slice(lower.lastIndexOf('.') + 1);
+  const hl = languageFor(fileName);
+  if (!hl || hl === 'diff') return undefined;
+  return (lower.includes('.') && MONACO_BY_EXT[ext]) || MONACO_ID[hl] || hl;
+}

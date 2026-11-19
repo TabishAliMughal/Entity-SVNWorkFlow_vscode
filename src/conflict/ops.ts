@@ -1,6 +1,7 @@
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { decodeContent, type ContentEncoding } from '../compare/content';
+import { assertNoLocalIgnored } from '../localignore/model';
 import type { RepoEntry } from '../repos/model';
 import { pegSafe, type SvnClient } from '../svn/client';
 import { SvnError } from '../svn/errors';
@@ -186,6 +187,7 @@ export async function runTreeSteps(c: ConflictCtx, p: string, steps: readonly Tr
         await c.client.run(['resolve', '--accept', s.accept, '--', pegSafe(p)], o(c));
         break;
       case 'revert':
+        assertNoLocalIgnored([p]);
         await c.client.run(['revert', ...(isDir ? ['-R'] : []), '--', pegSafe(p)], o(c));
         break;
       case 'deleteForce':

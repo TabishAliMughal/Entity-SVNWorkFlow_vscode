@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { assertNoLocalIgnored } from '../localignore/model';
 import { RepoEntry } from '../repos/model';
 import { SvnClient, pegSafe } from '../svn/client';
 import { SvnError } from '../svn/errors';
@@ -78,6 +79,7 @@ function updatable(p: string): string {
 
 export async function updatePaths(c: Ctx, paths: readonly string[], o: { force?: boolean } = {}): Promise<UpdateResult> {
   const targets = dedupeNested(paths.map(updatable));
+  assertNoLocalIgnored(targets);
   const r = await c.client.run(['update', ...(o.force ? ['--force', '--accept', 'postpone'] : []), '--', ...targets.map(pegSafe)], opts(c));
   return { revision: parseUpdatedRevision(r.text), conflicts: parseUpdateConflicts(r.text) };
 }
@@ -90,6 +92,7 @@ export interface OverrideUpdateOptions {
 /** D1/D10: discard local changes (revert -R), optionally delete unversioned files, then update. */
 export async function overrideUpdate(c: Ctx, paths: readonly string[], o: OverrideUpdateOptions): Promise<UpdateResult> {
   const targets = dedupeNested(paths);
+  assertNoLocalIgnored(targets);
   if (c.signal?.aborted) throw new SvnError('cancelled', 'Cancelled');
   // From here the flow is not cancellable: stopping between revert and update would leave a half-reverted copy.
   const nc: Ctx = { ...c, signal: undefined };

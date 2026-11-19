@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { assertNoLocalIgnored } from '../localignore/model';
 import { requireIncoming } from '../incoming/guard';
 import { registerSvnCommand } from '../pane/commands';
 import { Services, CONFIG_SECTION } from '../services';
@@ -42,6 +43,7 @@ async function overrideCommit(context: vscode.ExtensionContext, services: Servic
     void vscode.window.showWarningMessage('Override and Commit works on one file or folder at a time. Select a single item.');
     return;
   }
+  assertNoLocalIgnored([targets[0].fsPath]);
   const { repo, fsPath, items } = await requireIncoming(services, targets[0].fsPath);
   const rel = path.relative(repo.localFolder, fsPath) || '.';
   const plan = await collectLocalChanges(services.client, repo.name, repo.localFolder, fsPath);

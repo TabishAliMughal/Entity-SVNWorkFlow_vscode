@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildLabel, contextValueFor, filterItems, matchesFilter, parseFilter, relativeDescription, statusIcon, statusText } from '../../src/pane/model';
+import { buildLabel, contextValueFor, folderContextValue, filterItems, matchesFilter, parseFilter, relativeDescription, statusIcon, statusText } from '../../src/pane/model';
 
 const out = { outgoing: true, incoming: false };
 const inc = { outgoing: false, incoming: true };
@@ -41,5 +41,13 @@ describe('labels', () => {
     expect(v).toMatch(/\bincoming\b/);
     expect(v).toMatch(/\bfile\b/);
     expect(contextValueFor({ item: 'unversioned', ...out }, true)).not.toMatch(/\bincoming\b/);
+  });
+});
+
+describe('folderContextValue', () => {
+  it('flags outgoing, incoming and an all-unversioned folder', () => {
+    expect(folderContextValue([{ item: 'modified', outgoing: true, incoming: false }, { item: 'normal', outgoing: false, incoming: true }])).toBe('svnFolder outgoing incoming');
+    expect(folderContextValue([{ item: 'unversioned', outgoing: true, incoming: false }])).toBe('svnFolder outgoing unversioned');
+    expect(folderContextValue([])).toBe('svnFolder');
   });
 });

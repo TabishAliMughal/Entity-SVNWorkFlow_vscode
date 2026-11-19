@@ -190,6 +190,8 @@ export class CommitDialog {
   private isWholeChangelist(repo: RepoEntry, selected: readonly string[]): boolean {
     const cl = this.req.changelist;
     if (!cl || this.req.repos.length !== 1) return false;
+    // `svn commit --changelist` would also commit members that are on the Local Ignore List.
+    if (this.services.incoming.getState(repo.name)?.ignored.some((i) => i.changelist === cl)) return false;
     const members = this.entries.filter((e) => e.repoName === repo.name && e.changelist === cl && entryKind(e) === 'commit').map((e) => pathKey(e.path));
     const sel = new Set(selected.map((p) => pathKey(p)));
     return members.length > 0 && members.length === sel.size && members.every((k) => sel.has(k));

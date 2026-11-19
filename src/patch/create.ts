@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { decodeContent } from '../compare/content';
 import { fetchContent } from '../compare/fetch';
+import { currentLocalIgnoreList, isLocalIgnored } from '../localignore/model';
 import type { RepoEntry } from '../repos/model';
 import { pegSafe, type SvnClient } from '../svn/client';
 import type { StatusEntry } from '../svn/xml';
@@ -71,9 +72,12 @@ export function toPatchEntry(e: StatusEntry, isDir: boolean): PatchEntry {
 /** Changed entries under the given paths (svn status), de-duplicated, sorted by path. Unversioned and other unrepresentable ones are included so callers can report them. */
 export async function collectChanges(client: SvnClient, repo: RepoEntry, paths: readonly string[], signal?: AbortSignal): Promise<PatchEntry[]> {
   const seen = new Map<string, PatchEntry>();
+  const ignored = currentLocalIgnoreList();
   for (const p of paths) {
+    if (isLocalIgnored(p, ignored)) continue;
     const { entries } = await client.status(p, { repoName: repo.name, cwd: repo.localFolder, signal });
     for (const e of entries) {
+      if (isLocalIgnored(e.path, ignored)) continue;
       const key = path.normalize(e.path).toLowerCase();
       if (seen.has(key)) continue;
       const isDir = await fs.stat(e.path).then((s) => s.isDirectory(), () => false);

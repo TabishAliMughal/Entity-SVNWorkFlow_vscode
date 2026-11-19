@@ -8,7 +8,13 @@ export class RepoNode {
 }
 
 export class ItemNode {
-  constructor(readonly repo: RepoEntry, readonly item: ChangeItem) {}
+  /** `local`: shown inside the Local Ignore List group (restricted context menu). */
+  constructor(readonly repo: RepoEntry, readonly item: ChangeItem, readonly local = false) {}
+}
+
+/** The "Local Ignore List" group: files that are never committed or updated by this extension. */
+export class LocalIgnoreNode {
+  constructor(readonly repo: RepoEntry, readonly items: ChangeItem[]) {}
 }
 
 export class MessageNode {
@@ -25,7 +31,7 @@ export class FolderNode {
   constructor(readonly repo: RepoEntry, readonly name: string, readonly path: string, readonly items: ChangeItem[], readonly children: TreeEntry[]) {}
 }
 
-export type PaneNode = RepoNode | ItemNode | MessageNode | ChangelistNode | ConflictsNode | FolderNode;
+export type PaneNode = RepoNode | ItemNode | MessageNode | ChangelistNode | ConflictsNode | FolderNode | LocalIgnoreNode;
 
 export function isItemNode(x: unknown): x is ItemNode {
   return x instanceof ItemNode;

@@ -30,12 +30,7 @@ for (const [name, def] of Object.entries(LANGS)) hljs.registerLanguage(name, def
 
 export const MAX_HIGHLIGHT_CHARS = 600_000;
 
-export function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
+export { el } from './dom';
 
 
 /** Highlighted HTML per line (plain escaped text when the language is unknown or the text is huge). */

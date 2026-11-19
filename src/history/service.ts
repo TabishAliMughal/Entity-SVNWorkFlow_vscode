@@ -1,3 +1,4 @@
+import { assertNoLocalIgnored } from '../localignore/model';
 import { parseUpdateConflicts } from '../ops/targets';
 import { SvnClient, SvnRunOptions, pegSafe } from '../svn/client';
 import { SvnError } from '../svn/errors';
@@ -83,6 +84,7 @@ export interface MergeOutcome {
 
 /** Update the path to a revision (`svn update -r`); leaves conflicts for the user (postpone). */
 export async function updateToRevision(client: SvnClient, t: HistoryTarget, rev: number, signal?: AbortSignal): Promise<MergeOutcome> {
+  assertNoLocalIgnored([t.fsPath]);
   const r = await client.run(['update', '-r', String(rev), '--accept', 'postpone', '--', pegSafe(t.fsPath)], { repoName: t.repoName, cwd: t.cwd, signal });
   return { text: r.text, conflicts: parseUpdateConflicts(r.text) };
 }

@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { isSameOrUnder } from '../incoming/model';
+import { LocalIgnoreError, assertNoLocalIgnored, currentLocalIgnoreList, isLocalIgnored } from '../localignore/model';
 import { dedupeNested, parseUpdateConflicts, parseUpdatedRevision } from '../ops/targets';
 import { RepoEntry } from '../repos/model';
 import { Credentials, SvnClient, pegSafe } from '../svn/client';
@@ -92,6 +93,10 @@ export function isDirSafe(p: string): boolean {
 }
 
 export async function revertSteps(c: WcCtx, steps: readonly RevertStep[]): Promise<void> {
+  assertNoLocalIgnored(steps.filter((s) => s.recursive).map((s) => s.path));
+  const list = currentLocalIgnoreList();
+  const hit = steps.find((s) => isLocalIgnored(s.path, list));
+  if (hit) throw new LocalIgnoreError([hit.path]);
   for (const s of revertOrder(steps)) {
     await c.client.run(['revert', '--depth', s.recursive ? 'infinity' : 'empty', '--', pegSafe(s.path)], o(c));
   }
