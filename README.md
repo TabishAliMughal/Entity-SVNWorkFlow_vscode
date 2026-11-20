@@ -45,6 +45,10 @@ SVN workflows inside VS Code, powered by the `svn.exe` command line client that 
 
 Open Settings and search for "SVN" for the full list.
 
+## Branding
+
+Marketplace icon: `media/icon.png` (Entity brand template; see docs/CHANGELOG.md and docs/packaging.md).
+
 ## Source and issues
 
 https://github.com/TabishAliMughal/Entity-SVNWorkFlow_vscode (report problems under Issues).

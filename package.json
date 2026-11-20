@@ -3,6 +3,7 @@
   "displayName": "Entity-SVNWorkflow",
   "description": "SVN workflows for VS Code using TortoiseSVN's svn.exe: override update/commit, blame, history and partial pull.",
   "version": "0.1.0",
+  "icon": "media/icon.png",
   "publisher": "TabishAliMughal",
   "private": true,
   "license": "UNLICENSED",
