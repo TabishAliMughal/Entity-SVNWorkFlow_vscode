@@ -44,10 +44,11 @@ test-env/run/
 test-env/apache/
 test-env/*.pid
 
-# local-only documentation: no docs and no markdown on GitHub except README.md
+# local-only documentation: no docs and no markdown on GitHub except README.md and CLAUDE.md
 docs/
 *.md
 !/README.md
+!/CLAUDE.md
 
 # CI/local scratch error dump
 /error

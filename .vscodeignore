@@ -23,3 +23,4 @@ vitest.svn.config.ts
 scripts/**
 
 .history/**
+CLAUDE.md
